@@ -16,18 +16,34 @@
 6. [Queue とプロジェクション](#6-queue-とプロジェクション)
 7. [認証フロー（Google OIDC）](#7-認証フローgoogle-oidc)
 8. [HTTP API](#8-http-api)
-9. [拡張性](#9-拡張性)
-10. [プロジェクト構成](#10-プロジェクト構成)
-11. [wrangler.toml 設定例](#11-wranglertoml-設定例)
-12. [Atlas マイグレーション運用](#12-atlas-マイグレーション運用)
-13. [セキュリティ](#13-セキュリティ)
-14. [テスト戦略](#14-テスト戦略)
-15. [ローカル起動・検証手順](#15-ローカル起動検証手順)
-16. [今後の拡張](#16-今後の拡張)
+9. [他サービスからの JWT 検証（リソースサーバ向け）](#9-他サービスからの-jwt-検証リソースサーバ向け)
+10. [拡張性](#10-拡張性)
+11. [プロジェクト構成](#11-プロジェクト構成)
+12. [wrangler.toml 設定例](#12-wranglertoml-設定例)
+13. [Atlas マイグレーション運用](#13-atlas-マイグレーション運用)
+14. [セキュリティ](#14-セキュリティ)
+15. [テスト戦略](#15-テスト戦略)
+16. [ローカル起動・検証手順](#16-ローカル起動検証手順)
+17. [今後の拡張](#17-今後の拡張)
 
 ---
 
 ## 1. 概要・目的・非目的
+
+### 位置づけ
+
+本サービスは、自社の複数アプリケーション API（リソースサーバ）が共通で利用する**中央認証基盤**である。ブラウザ上のユーザーに対して Google ログインを提供し、発行した JWT を各アプリケーション API がオフラインで検証できる構造（RS256 + JWKS 公開）を採用する。各アプリ API は auth-server へ問い合わせを行わず、キャッシュした公開鍵で自律的に認証を完結させる。
+
+```
+ブラウザ ──認可フロー──▶ auth-server ──JWT 発行──▶ ブラウザ
+                               │
+                               └─ JWKS 公開
+                                        ▲
+アプリ API ◀──Bearer JWT── ブラウザ     │
+    │                                    │
+    └─────────────── JWKS フェッチ ──────┘
+    （kid 一致の公開鍵で署名検証・オフライン完結）
+```
 
 ### 目的
 
@@ -43,7 +59,7 @@ Cloudflare Workers（Rust → WASM）上で、拡張可能なアカウント認�
 | データ永続化（クエリ側） | D1（リードモデル） |
 | 非同期伝播 | Cloudflare Queue（DO → D1 プロジェクタ） |
 | 認証 | Google OIDC 認可コードフロー + PKCE |
-| セッション | JWT (HS256, 1h) |
+| セッション | JWT (RS256, 1h) + JWKS 公開 |
 | DBマイグレーション | Atlas（sqlite ソース → D1 適用） |
 
 ### スコープ外（非目的）
@@ -60,8 +76,9 @@ Cloudflare Workers（Rust → WASM）上で、拡張可能なアカウント認�
 ```mermaid
 flowchart LR
     Browser["ブラウザ"]
+    AppAPI["アプリ API\n(リソースサーバ)"]
 
-    subgraph CF["Cloudflare Workers"]
+    subgraph CF["Cloudflare Workers (auth-server)"]
         direction TB
         Router["axum Router\n(Worker / fetch handler)"]
         AccountDO["AccountDO\n(Durable Object)"]
@@ -72,13 +89,16 @@ flowchart LR
     Queue["Cloudflare Queue\n(EVENTS_QUEUE)"]
     DLQ["DLQ\n(EVENTS_DLQ)"]
     KV["KV\n(OIDC_KV)"]
-    Secrets["Secrets\nGOOGLE_CLIENT_SECRET\nJWT_SIGNING_KEY"]
+    Secrets["Secrets\nGOOGLE_CLIENT_SECRET\nJWT_PRIVATE_KEY"]
     Google["Google\nOIDC Endpoint"]
 
-    Browser -->|"HTTP / Cookie"| Router
+    Browser -->|"ログイン / JWT 取得"| Router
+    Browser -->|"Authorization: Bearer JWT"| AppAPI
+    AppAPI -->|"GET /.well-known/jwks.json\n(キャッシュ更新時のみ)"| Router
+    AppAPI -.->|"公開鍵で JWT 検証\n(オフライン・ネットワーク不要)"| AppAPI
     Router -->|"コマンド投入"| AccountDO
     Router -->|"クエリ"| D1
-    Router <-->|"state / JWKS"| KV
+    Router <-->|"state / JWKS キャッシュ"| KV
     Router <-->|"認可コード交換"| Google
     AccountDO -->|"イベント enqueue"| Queue
     Queue -->|"バッチ消費"| Projector
@@ -95,12 +115,13 @@ flowchart LR
 | `READ_DB` | D1 | リードモデル（accounts / identities） |
 | `EVENTS_QUEUE` | Queue producer + consumer | DO → プロジェクタへのイベント伝播 |
 | `EVENTS_DLQ` | Queue（DLQ） | 処理失敗イベントの隔離 |
-| `OIDC_KV` | KV Namespace | OIDC state / nonce / JWKS キャッシュ |
+| `OIDC_KV` | KV Namespace | OIDC state / nonce / Google JWKS キャッシュ |
 | `GOOGLE_CLIENT_SECRET` | Secret | Google OAuth クライアントシークレット |
-| `JWT_SIGNING_KEY` | Secret | セッション JWT 署名鍵（現行） |
-| `JWT_PREVIOUS_KEY` | Secret | セッション JWT 署名鍵（ローテ前） |
+| `JWT_PRIVATE_KEY` | Secret | JWT 署名用 RSA 秘密鍵 PEM（現行, PKCS#8） |
+| `JWT_PREVIOUS_PRIVATE_KEY` | Secret | JWT 署名用 RSA 秘密鍵 PEM（ローテ前） |
 | `GOOGLE_CLIENT_ID` | Var | Google OAuth クライアント ID |
 | `OAUTH_REDIRECT_URI` | Var | コールバック URI |
+| `JWT_ISSUER` | Var | JWT `iss` クレーム（例: `https://auth.example.com`） |
 | `SESSION_TTL_SECS` | Var | JWT 有効期間（デフォルト 3600） |
 
 ---
@@ -344,15 +365,19 @@ sequenceDiagram
 
 ```json
 {
-  "sub": "01JGVQ...",   // account_id
-  "kid": "v1",          // 署名鍵バージョン
+  "iss": "https://auth.example.com",   // JWT_ISSUER の値
+  "sub": "01JGVQ...",                  // account_id
+  "aud": "default",                    // 対象サービス識別（将来マルチテナント拡張可）
+  "kid": "v1",                         // 署名鍵バージョン（JWKS の kid と対応）
   "iat": 1745000000,
   "exp": 1745003600,
-  "jti": "01JGVS..."    // ランダム（将来の revoke 用）
+  "jti": "01JGVS..."                   // ランダム（将来の revoke 用）
 }
 ```
 
-- アルゴリズム: HS256
+- アルゴリズム: **RS256**（RSA 2048-bit）
+- 秘密鍵: `JWT_PRIVATE_KEY` Secret（PKCS#8 PEM）で署名
+- 公開鍵: `/.well-known/jwks.json` で配布（各アプリ API はここから取得）
 - 有効期間: `SESSION_TTL_SECS`（デフォルト 3600 秒）
 - クッキー: `__Host-session; Secure; HttpOnly; SameSite=Lax; Path=/`
 - リフレッシュ: day-1 では未実装。期限切れ時は再 OIDC フローを踏む
@@ -368,6 +393,8 @@ sequenceDiagram
 | `POST` | `/auth/logout` | セッションクッキー削除 |
 | `GET` | `/me` | 自アカウント情報 + 連携 Identity 一覧（D1 read） |
 | `POST` | `/me/identities/google/unlink` | `UnlinkIdentity` コマンド投入 |
+| `GET` | `/.well-known/jwks.json` | **公開鍵セット（RFC 7517）。アプリ API が JWT 検証に使用** |
+| `GET` | `/.well-known/openid-configuration` | Discovery（`issuer`, `jwks_uri` 等の最小実装） |
 | `GET` | `/healthz` | Liveness check（200 固定） |
 
 将来追加予定（実装しない）:
@@ -392,7 +419,110 @@ sequenceDiagram
 
 ---
 
-## 9. 拡張性
+## 9. 他サービスからの JWT 検証（リソースサーバ向け）
+
+### 9.1 ユースケース
+
+自社のアプリケーション API（リソースサーバ）は、クライアントから送られてくる `Authorization: Bearer <JWT>` を検証して、リクエスト元ユーザーを特定する。auth-server への問い合わせは行わず、公開鍵を使ったオフライン検証で完結させる。
+
+```
+クライアント ──▶ アプリ API
+                  │
+                  │  1. JWT ヘッダから kid を取得
+                  │  2. JWKS キャッシュを参照（なければ /.well-known/jwks.json をフェッチ）
+                  │  3. kid 一致の公開鍵で RS256 署名検証
+                  │  4. iss / aud / exp をチェック
+                  └─ sub (account_id) をリクエストコンテキストに乗せて処理続行
+```
+
+### 9.2 JWKS エンドポイント
+
+`GET /.well-known/jwks.json` のレスポンス例:
+
+```json
+{
+  "keys": [
+    {
+      "kty": "RSA",
+      "use": "sig",
+      "alg": "RS256",
+      "kid": "v1",
+      "n":   "<Base64URL encoded modulus>",
+      "e":   "AQAB"
+    },
+    {
+      "kty": "RSA",
+      "use": "sig",
+      "alg": "RS256",
+      "kid": "v0",
+      "n":   "<旧鍵の modulus（ローテ移行期のみ含む）>",
+      "e":   "AQAB"
+    }
+  ]
+}
+```
+
+- `kid` は `JWT_PRIVATE_KEY` (v1) と `JWT_PREVIOUS_PRIVATE_KEY` (v0) の両方を含める（ローテ移行期）
+- 公開鍵は秘密鍵 PEM から起動時に導出し、JSON にシリアライズして返す
+- キャッシュヘッダ: `Cache-Control: public, max-age=3600`
+
+### 9.3 OpenID Connect Discovery
+
+`GET /.well-known/openid-configuration` の最小実装:
+
+```json
+{
+  "issuer":   "https://auth.example.com",
+  "jwks_uri": "https://auth.example.com/.well-known/jwks.json"
+}
+```
+
+これにより対応ライブラリが自動でエンドポイントを発見できる。
+
+### 9.4 アプリ API 側の検証手順
+
+1. JWT ヘッダ（Base64 デコード）から `kid` と `alg` を取得
+2. ローカルキャッシュに `kid` が存在しなければ `jwks_uri` へ GET（`kid` ミスマッチ時も強制再フェッチ）
+3. `kid` が一致する公開鍵で RS256 署名を検証
+4. claims を検証:
+   - `iss == JWT_ISSUER`（設定値と一致）
+   - `aud` に自サービス識別子が含まれる（`"default"` を許容するか厳密にチェックするかはサービス側の判断）
+   - `exp > 現在時刻`
+   - `iat` が未来すぎないこと（時計ズレ対策: ±5 分の leeway）
+5. `sub` を `account_id` として以降の処理に使用
+
+### 9.5 JWKS キャッシュ戦略
+
+| 状況 | 対応 |
+|---|---|
+| 初回リクエスト | `jwks_uri` をフェッチしてメモリ/永続ストアにキャッシュ |
+| キャッシュ有効期間 | `Cache-Control: max-age` に従う（デフォルト 1 時間） |
+| `kid` ミスマッチ | キャッシュ無効化して再フェッチ（鍵ローテ検出） |
+| `jwks_uri` フェッチ失敗 | 最後に成功したキャッシュを一定期間使い続けて 503 を防ぐ |
+
+### 9.6 各言語の推奨ライブラリ
+
+| 言語 | ライブラリ |
+|---|---|
+| Rust | `jsonwebtoken` + `reqwest`（JWKS フェッチ） |
+| Go | `github.com/lestrrat-go/jwx/v2` |
+| Node.js / TypeScript | `jose` |
+| Python | `PyJWT[crypto]` + `cryptography` |
+| Java / Kotlin | `nimbus-jose-jwt` |
+
+### 9.7 エラーハンドリング
+
+| 状況 | レスポンス |
+|---|---|
+| `Authorization` ヘッダなし | `401 Unauthorized` |
+| 署名検証失敗 | `401 Unauthorized` |
+| `exp` 切れ | `401 Unauthorized`（クライアントは再ログインへ） |
+| `iss` / `aud` 不一致 | `401 Unauthorized` |
+| JWKS フェッチ失敗かつキャッシュなし | `503 Service Unavailable` |
+
+---
+
+## 10. 拡張性
 
 ### IdentityProvider トレイト
 
@@ -426,7 +556,7 @@ pub struct VerifiedIdentity {
 
 ---
 
-## 10. プロジェクト構成
+## 11. プロジェクト構成
 
 ```
 auth-server/
@@ -444,14 +574,16 @@ auth-server/
     │   ├── mod.rs          # axum Router 組み立て
     │   ├── auth.rs         # /auth/:provider/* ハンドラ
     │   ├── me.rs           # /me ハンドラ
+    │   ├── well_known.rs   # /.well-known/jwks.json, /openid-configuration
     │   └── error.rs        # axum エラーマッピング
     ├── auth/
     │   ├── mod.rs
     │   ├── provider.rs     # IdentityProvider trait, VerifiedIdentity
     │   ├── providers/
     │   │   └── google.rs   # GoogleProvider
-    │   ├── session.rs      # JWT 発行・検証
-    │   └── jwks.rs         # JWKS フェッチ・キャッシュ
+    │   ├── session.rs      # JWT 発行・検証（RS256）
+    │   ├── jwks_self.rs    # 自サーバの秘密鍵 → JWKS JSON 構築
+    │   └── jwks_google.rs  # Google JWKS フェッチ・KV キャッシュ
     ├── commands/
     │   ├── mod.rs
     │   ├── dto.rs          # コマンド DTO
@@ -485,7 +617,7 @@ auth-server/
 
 ---
 
-## 11. wrangler.toml 設定例
+## 12. wrangler.toml 設定例
 
 ```toml
 name              = "auth-server"
@@ -529,22 +661,30 @@ id      = "<KV_NAMESPACE_ID>"   # wrangler kv namespace create で取得
 
 # ── Vars（非シークレット） ────────────────────────────────────
 [vars]
-GOOGLE_CLIENT_ID  = "<YOUR_CLIENT_ID>"
-OAUTH_REDIRECT_URI = "https://auth-server.example.com/auth/google/callback"
-SESSION_TTL_SECS  = "3600"
+GOOGLE_CLIENT_ID   = "<YOUR_CLIENT_ID>"
+OAUTH_REDIRECT_URI = "https://auth.example.com/auth/google/callback"
+JWT_ISSUER         = "https://auth.example.com"
+SESSION_TTL_SECS   = "3600"
 ```
 
 ### シークレット設定（デプロイ前に実行）
 
 ```bash
+# RSA 2048-bit 秘密鍵を生成して登録
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
+  -out /tmp/jwt_private.pem
+wrangler secret put JWT_PRIVATE_KEY < /tmp/jwt_private.pem
+
+# Google OAuth シークレット
 wrangler secret put GOOGLE_CLIENT_SECRET
-wrangler secret put JWT_SIGNING_KEY
-wrangler secret put JWT_PREVIOUS_KEY   # ローテ時のみ
+
+# 鍵ローテ時のみ（旧鍵を退避）
+wrangler secret put JWT_PREVIOUS_PRIVATE_KEY < /tmp/jwt_private_old.pem
 ```
 
 ---
 
-## 12. Atlas マイグレーション運用
+## 13. Atlas マイグレーション運用
 
 ### 構成
 
@@ -611,7 +751,7 @@ CREATE TABLE _atlas_revisions (
 
 ---
 
-## 13. セキュリティ
+## 14. セキュリティ
 
 ### CSRF / リプレイ対策
 
@@ -632,10 +772,15 @@ Set-Cookie: __Host-session=<JWT>; Secure; HttpOnly; SameSite=Lax; Path=/
 
 ### JWT 鍵ローテーション
 
-- `JWT_SIGNING_KEY`（現行）と `JWT_PREVIOUS_KEY`（旧鍵）の2本を常時保持
-- JWT ヘッダの `kid` フィールドで使用鍵を識別
-- 検証時は `kid` に応じて適切な鍵を選択（旧鍵のトークンも有効期間中は受け入れる）
-- 月次で新鍵へ切り替え: `JWT_PREVIOUS_KEY = 旧 JWT_SIGNING_KEY`, `JWT_SIGNING_KEY = 新鍵`
+- **アルゴリズム**: RS256、RSA 2048-bit 以上
+- `JWT_PRIVATE_KEY`（現行, kid=v1）と `JWT_PREVIOUS_PRIVATE_KEY`（旧鍵, kid=v0）の2本を常時保持
+- JWKS には両方の `kid` の公開鍵を含める。各アプリ API は JWKS キャッシュの `kid` ミスマッチを検出した際に自動再フェッチする（§9.5 参照）
+- 月次切り替え手順:
+  1. 新 RSA 秘密鍵を生成
+  2. `JWT_PREVIOUS_PRIVATE_KEY = 旧 JWT_PRIVATE_KEY` として登録
+  3. `JWT_PRIVATE_KEY = 新鍵` として登録
+  4. Worker 再デプロイ → JWKS に v0 (旧) / v1 (新) の両公開鍵が乗る
+  5. 既存セッション（最大 1h）が期限切れになったら v0 を JWKS から除去
 
 ### その他
 
@@ -645,7 +790,7 @@ Set-Cookie: __Host-session=<JWT>; Secure; HttpOnly; SameSite=Lax; Path=/
 
 ---
 
-## 14. テスト戦略
+## 15. テスト戦略
 
 ### ユニットテスト（I/O なし）
 
@@ -691,7 +836,7 @@ wrangler d1 execute READ_DB --local \
 
 ---
 
-## 15. ローカル起動・検証手順
+## 16. ローカル起動・検証手順
 
 ### 初回セットアップ
 
@@ -749,7 +894,7 @@ npx wrangler tail --format pretty
 
 ---
 
-## 16. 今後の拡張
+## 17. 今後の拡張
 
 本タスクのスコープ外だが、設計上のフックとして記録しておく。
 
