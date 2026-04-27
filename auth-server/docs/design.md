@@ -158,6 +158,7 @@ Identity {
 1. `Active` 状態には `identities` が1つ以上必要
 2. 同一 `(provider, subject)` は複数の Account に紐付けない
 3. `Suspended → Suspended` への遷移は拒否
+4. **`Identity` の登録には `email_verified == true` が必須**。プロバイダから `email_verified: false` の ID トークンを受領した場合はコマンドを拒否する（§7.4 参照）
 
 ---
 
@@ -337,6 +338,7 @@ sequenceDiagram
     G->>W: {id_token, access_token}
     W->>K: GET jwks (キャッシュ or fetch from Google)
     W->>W: ID トークン検証 (iss, aud, exp, nonce)
+    W->>W: email_verified == true をチェック（false なら 400）
     W->>D: SELECT account_id FROM identities WHERE provider='google' AND subject=?
     alt 既存アカウント
         W->>DO: SignInWithGoogle (noop or link)
@@ -344,6 +346,7 @@ sequenceDiagram
         W->>DO: SignInWithGoogle (AccountRegistered + GoogleIdentityLinked)
     end
     DO->>W: {account_id, is_new}
+    W->>W: return_to を許可リスト検証（不正ならデフォルト "/" にフォールバック）
     W->>B: 302 Redirect + Set-Cookie: __Host-session=<JWT>
 ```
 
@@ -360,6 +363,37 @@ sequenceDiagram
 - Key: `oidc:state:{state_value}`
 - TTL: 600 秒（10 分）
 - `state` は 32 バイト CSPRNG ← URLSafe Base64
+
+### return_to の検証ルール（オープンリダイレクト対策）
+
+`return_to` はサインイン開始時（`/auth/google/start`）にクエリパラメータとして受け取り、KV に保存する。コールバック処理でリダイレクト先として使用する前に以下を検証し、**いずれかに違反したらデフォルト `/` にフォールバック**する。エラーは返さない（攻撃観測を防ぐ）。
+
+| 条件 | 理由 |
+|---|---|
+| `/` で始まること | 絶対 URL（`https://evil.com`）を拒否 |
+| `//` で始まらないこと | プロトコル相対 URL（`//evil.com`）を拒否 |
+| `\` を含まないこと | `\evil.com` がブラウザでホスト名に解釈されるケースを排除 |
+| URL デコード後も同条件を満たすこと | 二重エンコード（`%2F%2F`）によるバイパスを防ぐ |
+
+```rust
+// 疑似コード: return_to サニタイザ
+fn sanitize_return_to(raw: &str) -> &str {
+    let decoded = percent_decode(raw);
+    if decoded.starts_with('/') && !decoded.starts_with("//") && !decoded.contains('\\') {
+        raw   // 元の（エンコード済み）値をそのまま使う
+    } else {
+        "/"
+    }
+}
+```
+
+### email_verified 検証ルール（未検証メール対策）
+
+Google は `hd`（ホステッドドメイン）以外のアカウントで稀に `email_verified: false` を返す。この場合は認証を拒否する。
+
+- ID トークン検証（iss/aud/exp/nonce）の直後にチェック
+- `email_verified == false` の場合: `400 Bad Request`、ボディ `{"error": "email_not_verified"}`
+- Account 集約の不変条件（§3）とも整合する
 
 ### セッション JWT
 
@@ -761,6 +795,8 @@ CREATE TABLE _atlas_revisions (
 | nonce リプレイ | `nonce` を ID トークンに紐付け。KV から取得・削除済みであれば再利用不可 |
 | コード傍受 | PKCE S256 必須（`code_verifier` はブラウザに渡さない） |
 | セッション固定 | ログイン完了時に必ず新規 JWT を発行 |
+| **オープンリダイレクト** | `return_to` はコールバック時に検証（§7 参照）。`/` 始まり・`//` `\` を含まない・URL デコード後も同条件を満たすこと。違反時は `/` にフォールバック（エラーは返さない） |
+| **未検証メール登録** | ID トークンの `email_verified == false` は即時 400 拒否（§7 参照）。Account 集約の不変条件（§3）でも二重防護 |
 
 ### クッキー設定
 
