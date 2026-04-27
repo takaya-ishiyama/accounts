@@ -122,6 +122,7 @@ flowchart LR
 | `GOOGLE_CLIENT_ID` | Var | Google OAuth クライアント ID |
 | `OAUTH_REDIRECT_URI` | Var | コールバック URI |
 | `JWT_ISSUER` | Var | JWT `iss` クレーム（例: `https://auth.example.com`） |
+| `JWT_DEFAULT_AUDIENCE` | Var | JWT `aud` クレーム（例: `"app-api"`）。マルチサービス時は動的解決へ移行 |
 | `SESSION_TTL_SECS` | Var | JWT 有効期間（デフォルト 3600） |
 
 ---
@@ -401,7 +402,7 @@ Google は `hd`（ホステッドドメイン）以外のアカウントで稀�
 {
   "iss": "https://auth.example.com",   // JWT_ISSUER の値
   "sub": "01JGVQ...",                  // account_id
-  "aud": "default",                    // 対象サービス識別（将来マルチテナント拡張可）
+  "aud": "app-api",                    // JWT_DEFAULT_AUDIENCE の値（具体的なサービス識別子）
   "kid": "v1",                         // 署名鍵バージョン（JWKS の kid と対応）
   "iat": 1745000000,
   "exp": 1745003600,
@@ -415,6 +416,15 @@ Google は `hd`（ホステッドドメイン）以外のアカウントで稀�
 - 有効期間: `SESSION_TTL_SECS`（デフォルト 3600 秒）
 - クッキー: `__Host-session; Secure; HttpOnly; SameSite=Lax; Path=/`
 - リフレッシュ: day-1 では未実装。期限切れ時は再 OIDC フローを踏む
+
+#### `aud` の設計方針（トークン混用攻撃対策）
+
+`aud` に汎用的な `"default"` を使うと、複数のリソースサーバーが同じ `aud` を受け入れることになり、Service A 向けのトークンが Service B でも有効になるトークン混用攻撃が成立する。
+
+- **day-1**: `JWT_DEFAULT_AUDIENCE` Var（例: `"app-api"`）を固定値として使用。各リソースサーバーはこの値のみを受け入れるよう設定する
+- **将来（マルチサービス対応）**: `/auth/google/start?audience=<service-id>` パラメータを受け取り、auth-server に登録済みのサービス識別子リスト（`ALLOWED_AUDIENCES` Var）と照合してから `aud` にセットする。未登録の `audience` はログイン開始時点でエラーを返す
+
+各リソースサーバー側では §9.4 の検証ステップで **`aud` が自サービス識別子と完全一致すること**を必須とし、`"default"` や `*` など曖昧な値での受け入れを禁止する。
 
 ---
 
@@ -520,7 +530,7 @@ Google は `hd`（ホステッドドメイン）以外のアカウントで稀�
 3. `kid` が一致する公開鍵で RS256 署名を検証
 4. claims を検証:
    - `iss == JWT_ISSUER`（設定値と一致）
-   - `aud` に自サービス識別子が含まれる（`"default"` を許容するか厳密にチェックするかはサービス側の判断）
+   - `aud` が自サービスの識別子と**完全一致**すること（`"default"` や部分一致は禁止。トークン混用攻撃を防ぐ）
    - `exp > 現在時刻`
    - `iat` が未来すぎないこと（時計ズレ対策: ±5 分の leeway）
 5. `sub` を `account_id` として以降の処理に使用
@@ -695,10 +705,11 @@ id      = "<KV_NAMESPACE_ID>"   # wrangler kv namespace create で取得
 
 # ── Vars（非シークレット） ────────────────────────────────────
 [vars]
-GOOGLE_CLIENT_ID   = "<YOUR_CLIENT_ID>"
-OAUTH_REDIRECT_URI = "https://auth.example.com/auth/google/callback"
-JWT_ISSUER         = "https://auth.example.com"
-SESSION_TTL_SECS   = "3600"
+GOOGLE_CLIENT_ID      = "<YOUR_CLIENT_ID>"
+OAUTH_REDIRECT_URI    = "https://auth.example.com/auth/google/callback"
+JWT_ISSUER            = "https://auth.example.com"
+JWT_DEFAULT_AUDIENCE  = "app-api"   # 具体的なサービス識別子を設定すること
+SESSION_TTL_SECS      = "3600"
 ```
 
 ### シークレット設定（デプロイ前に実行）
@@ -818,10 +829,34 @@ Set-Cookie: __Host-session=<JWT>; Secure; HttpOnly; SameSite=Lax; Path=/
   4. Worker 再デプロイ → JWKS に v0 (旧) / v1 (新) の両公開鍵が乗る
   5. 既存セッション（最大 1h）が期限切れになったら v0 を JWKS から除去
 
+### セキュリティレスポンスヘッダー
+
+axum のミドルウェアとして全エンドポイントに一律付与する。
+
+| ヘッダー | 値 | 目的 |
+|---|---|---|
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` | HTTPS 強制（Workers は常時 HTTPS なので即時有効） |
+| `X-Frame-Options` | `DENY` | クリックジャッキング防止 |
+| `X-Content-Type-Options` | `nosniff` | MIME スニッフィング防止 |
+| `Referrer-Policy` | `no-referrer` | callback URL の `code`/`state` がリファラ経由で漏れるのを防ぐ |
+| `Cache-Control` | `no-store` | 認証レスポンスのキャッシュ禁止（プロキシ・ブラウザキャッシュ対策） |
+| `Content-Security-Policy` | `default-src 'none'` | 認証エンドポイントはリソースを返さないため最大限に制限 |
+
+> `Referrer-Policy: no-referrer` は特に重要。`/auth/google/callback?code=...&state=...` の URL が外部リソース（アナリティクス等）のリクエストに乗るとコードが漏洩する可能性がある。
+
+### レート制限
+
+| エンドポイント | 制限値 | 理由 |
+|---|---|---|
+| `/auth/google/start` | 10 req/min/IP | OIDC フロー開始の乱用・DoS 防止 |
+| `/auth/google/callback` | 20 req/min/IP | `state` ブルートフォース（実用的な突破は困難だが KV アクセスコスト保護）・DoS 防止 |
+| `/me` | 60 req/min/IP | 認証済みリクエストへの大量アクセスによるアカウント列挙・DoS 防止 |
+
+すべて Cloudflare Rate Limiting Rules（Worker 外の CF レイヤー）で設定する。将来的に IP 単位のより細かな制御が必要になった場合は `RateLimitDO`（§17 参照）を導入する。
+
 ### その他
 
 - **CORS**: `vars.ALLOWED_ORIGINS` 許可リストのみ。`*` は禁止
-- **レート制限**: Cloudflare Rate Limiting Rules を `/auth/google/start` に設定（IP 単位・分間 10 req）
 - **ログ**: `code`, `id_token`, メールアドレス本文は絶対にログに出さない。`subject` は SHA-256 ハッシュで記録
 
 ---
