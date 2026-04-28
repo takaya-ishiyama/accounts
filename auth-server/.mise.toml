@@ -1,18 +1,21 @@
+[settings]
+env = ["local"]
+
 [tasks.dev]
-run="MISE_ENV=local mise run dev"
+run="npx wrangler dev"
 
 [tasks.migrate-local]
 dir = "db"
-run="MISE_ENV=local atlas schema apply --env local"
+run="atlas schema apply --env local"
 
 [tasks.migrate-diff]
 dir = "db"
-run="MISE_ENV=local atlas migrate diff --env local"
+run="atlas migrate diff --env local"
 
 [tasks.migrate-staging]
 dir = "db"
-run="MISE_ENV=staging wrangler d1 migrations apply auth-db-staging --remote --env staging"
+run="wrangler d1 migrations apply auth-db-staging --remote --env staging"
 
 [tasks.migrate-production]
 dir = "db"
-run="MISE_ENV=production wrangler d1 migrations apply auth-db-production --remote --env production"
+run="wrangler d1 migrations apply auth-db-production --remote --env production"
