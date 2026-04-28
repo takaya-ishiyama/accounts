@@ -7,6 +7,8 @@ pub mod application;
 pub mod domain;
 pub mod infrastructure;
 
+pub use infrastructure::durable_objects::AuthDurableObject;
+
 fn router() -> Router {
     Router::new().route("/", get(root))
 }
