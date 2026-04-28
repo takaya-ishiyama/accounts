@@ -5,6 +5,36 @@ compatibility_date = "2026-04-24"
 [build]
 command = "cargo install -q \"worker-build@^0.8\" && worker-build --release --panic-unwind"
 
+[env.production]
+[[d1_databases]]
+binding = "DB"
+database_name = "auth-db-staging"
+database_id = "3a552034-f594-489b-8529-3a6c847e269a"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "ef84976498e54d42b6f30c95676d3e90"
+preview_id = "80d4152954e340299efa3ee978e3953a"
+
+[durable_objects]
+bindings = [
+  { name = "AUTH_DO", class_name = "AuthDurableObjectStaging" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["AuthDurableObjectStaging"]
+
+[[queues.producers]]
+binding = "QUEUE"
+queue = "auth-queue-staging"
+
+[[queues.consumers]]
+queue = "auth-queue-staging"
+max_batch_size = 10
+max_batch_timeout = 30
+
+[env.production]
 [[d1_databases]]
 binding = "DB"
 database_name = "auth-db"
