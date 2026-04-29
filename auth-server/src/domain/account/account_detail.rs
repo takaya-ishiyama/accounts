@@ -1,6 +1,6 @@
 #[derive(Debug, Clone)]
 pub struct AccountDetail {
     id: String,
-    name: String,
+    name: Option<String>,
     primary_email: String,
 }
