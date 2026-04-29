@@ -23,7 +23,7 @@ bindings = [
 
 [[migrations]]
 tag = "v1"
-new_classes = ["AuthDurableObject"]
+new_sqlite_classes = ["AuthDurableObject"]
 
 [[queues.producers]]
 binding = "QUEUE"
@@ -55,7 +55,7 @@ bindings = [
 
 [[env.staging.migrations]]
 tag = "v1"
-new_classes = ["AuthDurableObject"]
+new_sqlite_classes = ["AuthDurableObject"]
 
 [[env.staging.queues.producers]]
 binding = "QUEUE"
@@ -87,7 +87,7 @@ bindings = [
 
 [[env.production.migrations]]
 tag = "v1"
-new_classes = ["AuthDurableObject"]
+new_sqlite_classes = ["AuthDurableObject"]
 
 [[env.production.queues.producers]]
 binding = "QUEUE"
