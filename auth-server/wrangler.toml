@@ -27,12 +27,14 @@ new_classes = ["AuthDurableObject"]
 
 [[queues.producers]]
 binding = "QUEUE"
-queue = "auth-queue-staging"
+queue = "auth-queue-local"
 
 [[queues.consumers]]
-queue = "auth-queue-staging"
+queue = "auth-queue-local"
 max_batch_size = 10
 max_batch_timeout = 30
+
+# staging
 
 [env.staging]
 
@@ -64,6 +66,8 @@ queue = "auth-queue-staging"
 max_batch_size = 10
 max_batch_timeout = 30
 
+# production
+
 [env.production]
 
 [[env.production.d1_databases]]
@@ -87,9 +91,9 @@ new_classes = ["AuthDurableObject"]
 
 [[env.production.queues.producers]]
 binding = "QUEUE"
-queue = "auth-queue"
+queue = "auth-queue-production"
 
 [[env.production.queues.consumers]]
-queue = "auth-queue"
+queue = "auth-queue-production"
 max_batch_size = 10
 max_batch_timeout = 30
