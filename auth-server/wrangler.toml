@@ -2,6 +2,10 @@ name = "auth-server"
 main = "build/index.js"
 compatibility_date = "2026-04-24"
 
+[observability]
+enabled = true
+head_sampling_rate = 1
+
 [build]
 command = "cargo install -q \"worker-build@^0.8\" && worker-build --release --panic-unwind"
 
