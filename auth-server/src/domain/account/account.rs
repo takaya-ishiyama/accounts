@@ -1,4 +1,4 @@
-use crate::domain::account::identity::Identity;
+use crate::domain::account::{account_detail::AccountDetail, identity::Identity};
 
 #[derive(Debug, Clone)]
 enum AccountStatus {
@@ -11,7 +11,7 @@ enum AccountStatus {
 pub struct Account {
     id: String,
     status: AccountStatus,
-    primary_email: String,
+    account_detail: Option<AccountDetail>,
     identities: Vec<Identity>,
     version: u32,
 }
