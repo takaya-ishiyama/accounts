@@ -36,7 +36,12 @@ pub struct Identity {
 }
 
 impl Identity {
-    pub fn new_google(subject: String, email: String, email_verified: bool, linked_at: i64) -> Self {
+    pub fn new_google(
+        subject: String,
+        email: String,
+        email_verified: bool,
+        linked_at: i64,
+    ) -> Self {
         Self {
             provider: IdentityProvider::Google,
             subject,

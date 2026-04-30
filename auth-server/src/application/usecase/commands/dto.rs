@@ -44,11 +44,21 @@ pub struct CommandResponse {
 impl CommandDto {
     pub fn idempotency_key(&self) -> &str {
         match self {
-            Self::SignInWithGoogle { idempotency_key, .. } => idempotency_key,
-            Self::LinkGoogleIdentity { idempotency_key, .. } => idempotency_key,
-            Self::UnlinkIdentity { idempotency_key, .. } => idempotency_key,
-            Self::SuspendAccount { idempotency_key, .. } => idempotency_key,
-            Self::ReactivateAccount { idempotency_key, .. } => idempotency_key,
+            Self::SignInWithGoogle {
+                idempotency_key, ..
+            } => idempotency_key,
+            Self::LinkGoogleIdentity {
+                idempotency_key, ..
+            } => idempotency_key,
+            Self::UnlinkIdentity {
+                idempotency_key, ..
+            } => idempotency_key,
+            Self::SuspendAccount {
+                idempotency_key, ..
+            } => idempotency_key,
+            Self::ReactivateAccount {
+                idempotency_key, ..
+            } => idempotency_key,
         }
     }
 }

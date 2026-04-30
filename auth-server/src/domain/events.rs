@@ -5,11 +5,24 @@ use crate::domain::account::identity::{Identity, IdentityProvider};
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum EventPayload {
-    AccountRegistered { primary_email: String, identity: Identity },
-    GoogleIdentityLinked { identity: Identity },
-    IdentityUnlinked { provider: IdentityProvider, subject: String },
-    EmailVerified { provider: IdentityProvider, subject: String },
-    PrimaryEmailChanged { new_email: String },
+    AccountRegistered {
+        primary_email: String,
+        identity: Identity,
+    },
+    GoogleIdentityLinked {
+        identity: Identity,
+    },
+    IdentityUnlinked {
+        provider: IdentityProvider,
+        subject: String,
+    },
+    EmailVerified {
+        provider: IdentityProvider,
+        subject: String,
+    },
+    PrimaryEmailChanged {
+        new_email: String,
+    },
     AccountSuspended,
     AccountReactivated,
 }

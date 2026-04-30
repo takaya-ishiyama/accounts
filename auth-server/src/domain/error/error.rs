@@ -28,13 +28,22 @@ impl ApiError {
 #[derive(thiserror::Error, Debug, PartialEq)]
 pub enum DomainError {
     #[error("identity already linked to this account: {provider:?}/{subject}")]
-    IdentityAlreadyLinked { provider: IdentityProvider, subject: String },
+    IdentityAlreadyLinked {
+        provider: IdentityProvider,
+        subject: String,
+    },
     #[error("cannot unlink last identity from active account")]
     CannotUnlinkLastIdentity,
     #[error("invalid status transition: {from:?} -> {to:?}")]
-    InvalidStatusTransition { from: AccountStatus, to: AccountStatus },
+    InvalidStatusTransition {
+        from: AccountStatus,
+        to: AccountStatus,
+    },
     #[error("email not verified")]
     EmailNotVerified,
     #[error("identity not found: {provider:?}/{subject}")]
-    IdentityNotFound { provider: IdentityProvider, subject: String },
+    IdentityNotFound {
+        provider: IdentityProvider,
+        subject: String,
+    },
 }

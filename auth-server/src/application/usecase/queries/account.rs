@@ -18,10 +18,7 @@ pub struct IdentityRow {
     pub linked_at: i64,
 }
 
-pub async fn find_account_id_by_google_subject(
-    env: &Env,
-    subject: &str,
-) -> Result<Option<String>> {
+pub async fn find_account_id_by_google_subject(env: &Env, subject: &str) -> Result<Option<String>> {
     #[derive(Deserialize)]
     struct Row {
         account_id: String,

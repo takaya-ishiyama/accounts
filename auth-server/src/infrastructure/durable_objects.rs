@@ -5,7 +5,7 @@ use worker::*;
 use crate::application::commands::dto::{CommandDto, CommandResponse};
 use crate::domain::account::account::Account;
 use crate::domain::events::EventEnvelope;
-use crate::domain::logic::{Command, decide};
+use crate::domain::logic::{decide, Command};
 use crate::infrastructure::ids::new_uuid_v7;
 use crate::infrastructure::time::now_ms;
 
@@ -51,8 +51,8 @@ impl AuthDurableObject {
 
         // Return cached result for duplicate requests
         if let Some(cached_json) = storage.get::<String>(&cache_key).await? {
-            let cached: CommandResponse = serde_json::from_str(&cached_json)
-                .map_err(|e| Error::RustError(e.to_string()))?;
+            let cached: CommandResponse =
+                serde_json::from_str(&cached_json).map_err(|e| Error::RustError(e.to_string()))?;
             return Response::from_json(&cached);
         }
 
@@ -62,8 +62,8 @@ impl AuthDurableObject {
         for seq in 1..=version {
             let key = format!("event:{seq:020}");
             if let Some(ev_json) = storage.get::<String>(&key).await? {
-                let ev: EventEnvelope = serde_json::from_str(&ev_json)
-                    .map_err(|e| Error::RustError(e.to_string()))?;
+                let ev: EventEnvelope =
+                    serde_json::from_str(&ev_json).map_err(|e| Error::RustError(e.to_string()))?;
                 account = account.apply(&ev);
             }
         }
@@ -75,10 +75,9 @@ impl AuthDurableObject {
         let new_payloads = match decide(&account, &domain_cmd) {
             Ok(payloads) => payloads,
             Err(domain_err) => {
-                let body = serde_json::to_string(
-                    &serde_json::json!({ "error": domain_err.to_string() }),
-                )
-                .unwrap_or_default();
+                let body =
+                    serde_json::to_string(&serde_json::json!({ "error": domain_err.to_string() }))
+                        .unwrap_or_default();
                 let mut resp = Response::ok(body)?;
                 resp = resp.with_status(422);
                 let headers = Headers::new();
@@ -108,8 +107,7 @@ impl AuthDurableObject {
         for ev in &new_envelopes {
             let event_key = format!("event:{:020}", ev.version);
             let outbox_key = format!("outbox:{:020}", ev.version);
-            let ev_json = serde_json::to_string(ev)
-                .map_err(|e| Error::RustError(e.to_string()))?;
+            let ev_json = serde_json::to_string(ev).map_err(|e| Error::RustError(e.to_string()))?;
             storage.put(&event_key, ev_json).await?;
             storage.put(&outbox_key, "pending").await?;
         }
@@ -124,8 +122,8 @@ impl AuthDurableObject {
             account_id: account_id.clone(),
             events_emitted: new_envelopes.len(),
         };
-        let resp_json = serde_json::to_string(&resp)
-            .map_err(|e| Error::RustError(e.to_string()))?;
+        let resp_json =
+            serde_json::to_string(&resp).map_err(|e| Error::RustError(e.to_string()))?;
         storage.put(&cache_key, resp_json).await?;
 
         // Schedule outbox alarm as safety net (30 s after command)
@@ -214,11 +212,11 @@ fn dto_to_command(dto: &CommandDto) -> Command {
             subject: subject.clone(),
             occurred_at: *occurred_at,
         },
-        CommandDto::SuspendAccount { occurred_at, .. } => {
-            Command::SuspendAccount { occurred_at: *occurred_at }
-        }
-        CommandDto::ReactivateAccount { occurred_at, .. } => {
-            Command::ReactivateAccount { occurred_at: *occurred_at }
-        }
+        CommandDto::SuspendAccount { occurred_at, .. } => Command::SuspendAccount {
+            occurred_at: *occurred_at,
+        },
+        CommandDto::ReactivateAccount { occurred_at, .. } => Command::ReactivateAccount {
+            occurred_at: *occurred_at,
+        },
     }
 }

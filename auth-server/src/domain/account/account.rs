@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use crate::domain::account::{account_detail::AccountDetail, identity::{Identity, IdentityProvider}};
+use crate::domain::account::{
+    account_detail::AccountDetail,
+    identity::{Identity, IdentityProvider},
+};
 use crate::domain::events::{EventEnvelope, EventPayload};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -51,12 +54,17 @@ impl Account {
     }
 
     pub fn find_identity(&self, provider: &IdentityProvider, subject: &str) -> Option<&Identity> {
-        self.identities.iter().find(|i| i.provider() == provider && i.subject() == subject)
+        self.identities
+            .iter()
+            .find(|i| i.provider() == provider && i.subject() == subject)
     }
 
     pub(crate) fn apply(mut self, ev: &EventEnvelope) -> Self {
         match &ev.payload {
-            EventPayload::AccountRegistered { primary_email, identity } => {
+            EventPayload::AccountRegistered {
+                primary_email,
+                identity,
+            } => {
                 self.id = ev.aggregate_id.clone();
                 self.status = AccountStatus::Active;
                 self.account_detail = Some(AccountDetail {
@@ -70,10 +78,15 @@ impl Account {
                 self.identities.push(identity.clone());
             }
             EventPayload::IdentityUnlinked { provider, subject } => {
-                self.identities.retain(|i| !(i.provider() == provider && i.subject() == subject));
+                self.identities
+                    .retain(|i| !(i.provider() == provider && i.subject() == subject));
             }
             EventPayload::EmailVerified { provider, subject } => {
-                if let Some(identity) = self.identities.iter_mut().find(|i| i.provider() == provider && i.subject() == subject) {
+                if let Some(identity) = self
+                    .identities
+                    .iter_mut()
+                    .find(|i| i.provider() == provider && i.subject() == subject)
+                {
                     identity.email_verified = true;
                 }
             }

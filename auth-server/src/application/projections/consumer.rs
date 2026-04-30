@@ -38,7 +38,10 @@ async fn project(ev: &EventEnvelope, env: &Env) -> Result<()> {
     let aggregate_id = &ev.aggregate_id;
 
     match &ev.payload {
-        EventPayload::AccountRegistered { primary_email, identity } => {
+        EventPayload::AccountRegistered {
+            primary_email,
+            identity,
+        } => {
             db.prepare(
                 "INSERT INTO accounts (id, status, primary_email, created_at, updated_at, version) VALUES (?1, 'Active', ?2, ?3, ?3, ?4) ON CONFLICT(id) DO NOTHING",
             )
@@ -154,15 +157,13 @@ async fn update_account_version(
     version: u64,
     now: i64,
 ) -> Result<()> {
-    db.prepare(
-        "UPDATE accounts SET updated_at = ?1, version = ?2 WHERE id = ?3 AND version < ?2",
-    )
-    .bind(&[
-        JsValue::from(now),
-        JsValue::from(version as f64),
-        JsValue::from_str(account_id),
-    ])?
-    .run()
-    .await?;
+    db.prepare("UPDATE accounts SET updated_at = ?1, version = ?2 WHERE id = ?3 AND version < ?2")
+        .bind(&[
+            JsValue::from(now),
+            JsValue::from(version as f64),
+            JsValue::from_str(account_id),
+        ])?
+        .run()
+        .await?;
     Ok(())
 }

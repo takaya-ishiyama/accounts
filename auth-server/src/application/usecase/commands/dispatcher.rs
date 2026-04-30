@@ -1,5 +1,5 @@
 use serde::Serialize;
-use worker::{Env, Result, wasm_bindgen::JsValue};
+use worker::{wasm_bindgen::JsValue, Env, Result};
 
 use crate::application::commands::dto::{CommandDto, CommandResponse};
 
@@ -16,8 +16,11 @@ pub async fn dispatch(env: &Env, account_id: &str, cmd: &CommandDto) -> Result<C
     let namespace = env.durable_object("AUTH_DO")?;
     let stub = namespace.id_from_name(account_id)?.get_stub()?;
 
-    let body = serde_json::to_string(&DoCommandRequest { account_id, command: cmd })
-        .map_err(|e| worker::Error::RustError(e.to_string()))?;
+    let body = serde_json::to_string(&DoCommandRequest {
+        account_id,
+        command: cmd,
+    })
+    .map_err(|e| worker::Error::RustError(e.to_string()))?;
 
     let headers = worker::Headers::new();
     headers.set("Content-Type", "application/json")?;
