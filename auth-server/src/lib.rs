@@ -9,7 +9,13 @@ pub mod infrastructure;
 
 pub use infrastructure::durable_objects::AuthDurableObject;
 
-fn router() -> Router {
+#[derive(Clone)]
+pub struct AppState {
+    pub env: Env,
+}
+
+fn router(env: Env) -> Router {
+    let state = AppState { env };
     Router::new()
         .route("/", get(root))
         .route("/healthz", get(|| async { "OK" }))
@@ -23,15 +29,16 @@ fn router() -> Router {
             get(adapter::api::auth_google_callback::router),
         )
         .route("/auth/logout", get(adapter::api::auth_logout::router))
+        .with_state(state)
 }
 
 #[event(fetch)]
 async fn fetch(
     req: HttpRequest,
-    _env: Env,
+    env: Env,
     _ctx: Context,
 ) -> Result<axum::http::Response<axum::body::Body>> {
-    Ok(router().call(req).await?)
+    Ok(router(env).call(req).await?)
 }
 
 pub async fn root() -> &'static str {

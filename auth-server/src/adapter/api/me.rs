@@ -1,3 +1,7 @@
-pub async fn router() -> &'static str {
-    "Hello Axum!"
+use crate::AppState;
+use axum::extract::State;
+
+pub async fn router(State(state): State<AppState>) -> &'static str {
+    let _env = &state.env;
+    "Hello"
 }
