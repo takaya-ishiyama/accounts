@@ -1,0 +1,36 @@
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
+
+pub struct AppError(pub StatusCode, pub String);
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        let body = serde_json::json!({ "error": self.1 }).to_string();
+        (
+            self.0,
+            [("Content-Type", "application/json")],
+            body,
+        )
+            .into_response()
+    }
+}
+
+impl From<worker::Error> for AppError {
+    fn from(e: worker::Error) -> Self {
+        AppError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+    }
+}
+
+pub fn bad_request(msg: impl Into<String>) -> AppError {
+    AppError(StatusCode::BAD_REQUEST, msg.into())
+}
+
+pub fn unauthorized(msg: impl Into<String>) -> AppError {
+    AppError(StatusCode::UNAUTHORIZED, msg.into())
+}
+
+pub fn internal(msg: impl Into<String>) -> AppError {
+    AppError(StatusCode::INTERNAL_SERVER_ERROR, msg.into())
+}
