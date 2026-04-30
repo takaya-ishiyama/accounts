@@ -9,6 +9,13 @@ head_sampling_rate = 1
 [build]
 command = "cargo install -q \"worker-build@^0.8\" && worker-build --release --panic-unwind"
 
+[vars]
+GOOGLE_CLIENT_ID     = "<replace-me>"
+OAUTH_REDIRECT_URI   = "http://localhost:8787/auth/google/callback"
+JWT_ISSUER           = "http://localhost:8787"
+JWT_DEFAULT_AUDIENCE = "app-api"
+SESSION_TTL_SECS     = "3600"
+
 # Local dev (wrangler dev)
 [[d1_databases]]
 binding = "DB"
@@ -33,14 +40,27 @@ new_sqlite_classes = ["AuthDurableObject"]
 binding = "QUEUE"
 queue = "auth-queue-local"
 
+[[queues.producers]]
+binding = "AUTH_DLQ"
+queue = "auth-queue-local-dlq"
+
 [[queues.consumers]]
-queue = "auth-queue-local"
-max_batch_size = 10
+queue             = "auth-queue-local"
+max_batch_size    = 10
 max_batch_timeout = 30
+max_retries       = 5
+dead_letter_queue = "auth-queue-local-dlq"
 
 # staging
 
 [env.staging]
+
+[env.staging.vars]
+GOOGLE_CLIENT_ID     = "<replace-me>"
+OAUTH_REDIRECT_URI   = "https://staging.example.com/auth/google/callback"
+JWT_ISSUER           = "https://staging.example.com"
+JWT_DEFAULT_AUDIENCE = "app-api"
+SESSION_TTL_SECS     = "3600"
 
 [[env.staging.d1_databases]]
 binding = "DB"
@@ -65,14 +85,27 @@ new_sqlite_classes = ["AuthDurableObject"]
 binding = "QUEUE"
 queue = "auth-queue-staging"
 
+[[env.staging.queues.producers]]
+binding = "AUTH_DLQ"
+queue = "auth-queue-staging-dlq"
+
 [[env.staging.queues.consumers]]
-queue = "auth-queue-staging"
-max_batch_size = 10
+queue             = "auth-queue-staging"
+max_batch_size    = 10
 max_batch_timeout = 30
+max_retries       = 5
+dead_letter_queue = "auth-queue-staging-dlq"
 
 # production
 
 [env.production]
+
+[env.production.vars]
+GOOGLE_CLIENT_ID     = "<replace-me>"
+OAUTH_REDIRECT_URI   = "https://example.com/auth/google/callback"
+JWT_ISSUER           = "https://example.com"
+JWT_DEFAULT_AUDIENCE = "app-api"
+SESSION_TTL_SECS     = "3600"
 
 [[env.production.d1_databases]]
 binding = "DB"
@@ -97,7 +130,13 @@ new_sqlite_classes = ["AuthDurableObject"]
 binding = "QUEUE"
 queue = "auth-queue-production"
 
+[[env.production.queues.producers]]
+binding = "AUTH_DLQ"
+queue = "auth-queue-production-dlq"
+
 [[env.production.queues.consumers]]
-queue = "auth-queue-production"
-max_batch_size = 10
+queue             = "auth-queue-production"
+max_batch_size    = 10
 max_batch_timeout = 30
+max_retries       = 5
+dead_letter_queue = "auth-queue-production-dlq"

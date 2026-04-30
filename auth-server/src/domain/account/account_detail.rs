@@ -1,6 +1,8 @@
-#[derive(Debug, Clone)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AccountDetail {
-    id: String,
-    name: Option<String>,
-    primary_email: String,
+    pub(crate) id: String,
+    pub(crate) name: Option<String>,
+    pub(crate) primary_email: String,
 }
