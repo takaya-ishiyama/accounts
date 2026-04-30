@@ -1,7 +1,7 @@
 use serde::Serialize;
 use worker::{wasm_bindgen::JsValue, Env, Result};
 
-use crate::application::commands::dto::{CommandDto, CommandResponse};
+use crate::application::usecase::commands::dto::{CommandDto, CommandResponse};
 
 #[derive(Serialize)]
 struct DoCommandRequest<'a> {
