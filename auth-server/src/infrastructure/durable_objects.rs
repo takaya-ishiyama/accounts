@@ -2,7 +2,7 @@ use serde::Deserialize;
 use std::time::Duration;
 use worker::*;
 
-use crate::application::commands::dto::{CommandDto, CommandResponse};
+use crate::application::usecase::commands::dto::{CommandDto, CommandResponse};
 use crate::domain::account::account::Account;
 use crate::domain::events::EventEnvelope;
 use crate::domain::logic::{decide, Command};

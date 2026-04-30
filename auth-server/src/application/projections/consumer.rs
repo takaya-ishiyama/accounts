@@ -1,4 +1,4 @@
-use worker::{wasm_bindgen::JsValue, Env, MessageBatch, MessageSysInner, Result};
+use worker::{wasm_bindgen::JsValue, Env, MessageBatch, MessageExt, Result};
 
 use crate::domain::events::{EventEnvelope, EventPayload};
 use crate::infrastructure::time::now_ms;
@@ -152,7 +152,7 @@ async fn project(ev: &EventEnvelope, env: &Env) -> Result<()> {
 }
 
 async fn update_account_version(
-    db: &worker::d1::Database,
+    db: &worker::d1::D1Database,
     account_id: &str,
     version: u64,
     now: i64,
