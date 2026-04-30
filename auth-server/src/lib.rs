@@ -22,6 +22,7 @@ fn router() -> Router {
             "/auth/google/callback",
             get(adapter::api::auth_google_callback::router),
         )
+        .route("/auth/logout", get(adapter::api::auth_logout::router))
 }
 
 #[event(fetch)]
