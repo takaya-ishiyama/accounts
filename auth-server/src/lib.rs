@@ -10,7 +10,18 @@ pub mod infrastructure;
 pub use infrastructure::durable_objects::AuthDurableObject;
 
 fn router() -> Router {
-    Router::new().route("/", get(root))
+    Router::new()
+        .route("/", get(root))
+        .route("/healthz", get(|| async { "OK" }))
+        .route("/me", get(adapter::api::me::router))
+        .route(
+            "/auth/google/start",
+            get(adapter::api::auth_google_start::router),
+        )
+        .route(
+            "/auth/google/callback",
+            get(adapter::api::auth_google_callback::router),
+        )
 }
 
 #[event(fetch)]
