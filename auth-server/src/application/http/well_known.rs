@@ -6,7 +6,7 @@ use crate::application::{
 };
 use crate::infrastructure::env;
 
-use super::AppState;
+use crate::AppState;
 
 pub async fn jwks_json(
     State(state): State<AppState>,

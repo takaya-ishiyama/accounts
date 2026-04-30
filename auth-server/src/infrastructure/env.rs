@@ -9,7 +9,6 @@ pub fn secret(env: &Env, key: &str) -> Result<String> {
 }
 
 pub struct Environment {
-    pub db: String,
     pub google_client_id: String,
     pub google_client_secret: String,
     pub oauth_redirect_uri: String,
@@ -18,8 +17,7 @@ pub struct Environment {
 impl Environment {
     pub fn load(env: &Env) -> Result<Self> {
         Ok(Self {
-            db: var(env, "DB")?,
-            google_client_id: secret(env, "GOOGLE_CLIENT_ID")?,
+            google_client_id: var(env, "GOOGLE_CLIENT_ID")?,
             google_client_secret: secret(env, "GOOGLE_CLIENT_SECRET")?,
             oauth_redirect_uri: var(env, "OAUTH_REDIRECT_URI")?,
         })

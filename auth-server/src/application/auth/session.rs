@@ -137,8 +137,8 @@ pub fn verify_google_id_token(
     // Reconstruct public key from JWK n/e components
     let n_bytes = URL_SAFE_NO_PAD.decode(n_b64).map_err(|e| e.to_string())?;
     let e_bytes = URL_SAFE_NO_PAD.decode(e_b64).map_err(|e| e.to_string())?;
-    let n = num_bigint::BigUint::from_bytes_be(&n_bytes);
-    let e = num_bigint::BigUint::from_bytes_be(&e_bytes);
+    let n = rsa::BigUint::from_bytes_be(&n_bytes);
+    let e = rsa::BigUint::from_bytes_be(&e_bytes);
     let public_key = rsa::RsaPublicKey::new(n, e).map_err(|e| e.to_string())?;
 
     let verifying_key = VerifyingKey::<Sha256>::new(public_key);
