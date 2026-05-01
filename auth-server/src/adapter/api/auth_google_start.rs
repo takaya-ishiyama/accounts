@@ -7,8 +7,12 @@ use std::future::Future;
 use worker::send::SendFuture;
 
 use crate::{
-    application::{http::error::AppError, usecase::queries::auth_google_start::auth_google_start},
-    infrastructure::env::Environment,
+    application::{
+        auth::providers::google::GoogleProvider,
+        http::error::AppError,
+        usecase::queries::begin_signin::begin_signin,
+    },
+    infrastructure::{env::Environment, random::GetRandomTokenGenerator},
     AppState,
 };
 
@@ -26,6 +30,12 @@ pub fn router(
         let environment = Environment::load(e)?;
         let kv = e.kv("KV")?;
         let return_to = query.return_to.as_deref().unwrap_or("/");
-        auth_google_start(&environment, &kv, return_to).await
+        let tokens = GetRandomTokenGenerator;
+        let provider = GoogleProvider {
+            env: &environment,
+            tokens: &tokens,
+        };
+        let redirect = begin_signin(&provider, &kv, return_to).await?;
+        Ok(Redirect::to(&redirect.url))
     })
 }

@@ -2,6 +2,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use crate::domain::auth::provider::ProviderError;
 
 pub struct AppError(pub StatusCode, pub String);
 
@@ -20,6 +21,12 @@ impl IntoResponse for AppError {
 impl From<worker::Error> for AppError {
     fn from(e: worker::Error) -> Self {
         AppError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+    }
+}
+
+impl From<ProviderError> for AppError {
+    fn from(e: ProviderError) -> Self {
+        internal(e.to_string())
     }
 }
 

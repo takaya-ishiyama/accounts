@@ -1,4 +1,3 @@
-/// Output of a successful OIDC identity verification.
 #[derive(Debug, Clone)]
 pub struct VerifiedIdentity {
     pub provider: String,
