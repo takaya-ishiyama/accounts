@@ -9,13 +9,6 @@ head_sampling_rate = 1
 [build]
 command = "cargo install -q \"worker-build@^0.8\" && worker-build --release --panic-unwind"
 
-[vars]
-GOOGLE_CLIENT_ID     = "<replace-me>"
-OAUTH_REDIRECT_URI   = "http://localhost:8787/auth/google/callback"
-JWT_ISSUER           = "http://localhost:8787"
-JWT_DEFAULT_AUDIENCE = "app-api"
-SESSION_TTL_SECS     = "3600"
-
 # Local dev (wrangler dev)
 [[d1_databases]]
 binding = "DB"
