@@ -8,11 +8,12 @@ use worker::send::SendFuture;
 
 use crate::{
     application::{
-        auth::providers::google::GoogleProvider,
-        http::error::AppError,
+        auth::providers::google::GoogleProvider, http::error::AppError,
         usecase::queries::begin_signin::begin_signin,
     },
-    infrastructure::{env::Environment, random::GetRandomTokenGenerator},
+    infrastructure::{
+        env::Environment, oidc_state_store::KvOidcStateStore, random::GetRandomTokenGenerator,
+    },
     AppState,
 };
 
@@ -35,7 +36,8 @@ pub fn router(
             env: &environment,
             tokens: &tokens,
         };
-        let redirect = begin_signin(&provider, &kv, return_to).await?;
+        let oidc_state_store = KvOidcStateStore::new(&kv);
+        let redirect = begin_signin(&provider, &oidc_state_store, return_to).await?;
         Ok(Redirect::to(&redirect.url))
     })
 }

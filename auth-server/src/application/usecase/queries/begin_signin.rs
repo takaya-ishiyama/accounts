@@ -1,8 +1,6 @@
-use worker::kv::KvStore;
-
 use crate::{
     application::{
-        auth::oidc_state::{save, OidcStateValue},
+        auth::oidc_state::{OidcStateStore, OidcStateValue},
         http::error::AppError,
     },
     domain::auth::{
@@ -17,23 +15,25 @@ pub struct SignInRedirect {
 
 pub async fn begin_signin(
     provider: &dyn IdentityProvider,
-    kv: &KvStore,
+    oidc_state_store: &dyn OidcStateStore,
     return_to_raw: &str,
 ) -> Result<SignInRedirect, AppError> {
     let sanitized = return_to::sanitize(return_to_raw).into_owned();
 
-    let resp = provider.start(&StartCtx { return_to: &sanitized })?;
+    let resp = provider.start(&StartCtx {
+        return_to: &sanitized,
+    })?;
 
-    save(
-        kv,
-        &resp.state_key,
-        &OidcStateValue {
-            code_verifier: resp.code_verifier,
-            nonce: resp.nonce,
-            return_to: sanitized,
-        },
-    )
-    .await?;
+    oidc_state_store
+        .save(
+            &resp.state_key,
+            &OidcStateValue {
+                code_verifier: resp.code_verifier,
+                nonce: resp.nonce,
+                return_to: sanitized,
+            },
+        )
+        .await?;
 
     Ok(SignInRedirect {
         url: resp.authorization_url,

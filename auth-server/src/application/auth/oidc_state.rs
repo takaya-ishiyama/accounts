@@ -1,9 +1,5 @@
 use serde::{Deserialize, Serialize};
-use worker::{kv::KvStore, Result};
-
-use crate::infrastructure::kv as kv_helper;
-
-const TTL_SECS: u64 = 600; // 10 minutes
+use std::{future::Future, pin::Pin};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct OidcStateValue {
@@ -12,19 +8,24 @@ pub struct OidcStateValue {
     pub return_to: String,
 }
 
-pub async fn save(kv: &KvStore, state_key: &str, value: &OidcStateValue) -> Result<()> {
-    kv_helper::put_json(kv, &oidc_kv_key(state_key), value, TTL_SECS).await
+pub type OidcStateStoreResult<T> = Result<T, OidcStateStoreError>;
+pub type OidcStateStoreFuture<'a, T> = Pin<Box<dyn Future<Output = OidcStateStoreResult<T>> + 'a>>;
+
+#[derive(Debug, thiserror::Error)]
+pub enum OidcStateStoreError {
+    #[error("oidc state store error: {0}")]
+    Backend(String),
 }
 
-pub async fn load_and_delete(kv: &KvStore, state_key: &str) -> Result<Option<OidcStateValue>> {
-    let key = oidc_kv_key(state_key);
-    let value = kv_helper::get_json::<OidcStateValue>(kv, &key).await?;
-    if value.is_some() {
-        kv_helper::delete(kv, &key).await?;
-    }
-    Ok(value)
-}
+pub trait OidcStateStore {
+    fn save<'a>(
+        &'a self,
+        state_key: &'a str,
+        value: &'a OidcStateValue,
+    ) -> OidcStateStoreFuture<'a, ()>;
 
-fn oidc_kv_key(state: &str) -> String {
-    format!("oidc:state:{state}")
+    fn load_and_delete<'a>(
+        &'a self,
+        state_key: &'a str,
+    ) -> OidcStateStoreFuture<'a, Option<OidcStateValue>>;
 }

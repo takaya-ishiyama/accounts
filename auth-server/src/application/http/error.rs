@@ -1,20 +1,17 @@
+use crate::{
+    application::auth::oidc_state::OidcStateStoreError, domain::auth::provider::ProviderError,
+};
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use crate::domain::auth::provider::ProviderError;
 
 pub struct AppError(pub StatusCode, pub String);
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let body = serde_json::json!({ "error": self.1 }).to_string();
-        (
-            self.0,
-            [("Content-Type", "application/json")],
-            body,
-        )
-            .into_response()
+        (self.0, [("Content-Type", "application/json")], body).into_response()
     }
 }
 
@@ -26,6 +23,12 @@ impl From<worker::Error> for AppError {
 
 impl From<ProviderError> for AppError {
     fn from(e: ProviderError) -> Self {
+        internal(e.to_string())
+    }
+}
+
+impl From<OidcStateStoreError> for AppError {
+    fn from(e: OidcStateStoreError) -> Self {
         internal(e.to_string())
     }
 }
