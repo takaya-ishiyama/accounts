@@ -32,6 +32,15 @@ fn router(env: Env) -> Router {
         .with_state(state)
 }
 
+#[event(queue)]
+async fn queue(
+    batch: MessageBatch<domain::events::EventEnvelope>,
+    env: Env,
+    _ctx: Context,
+) -> Result<()> {
+    application::projections::consumer::handle_batch(batch, &env).await
+}
+
 #[event(fetch)]
 async fn fetch(
     req: HttpRequest,
