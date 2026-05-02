@@ -3,6 +3,7 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE accounts (
     id            TEXT    NOT NULL PRIMARY KEY,
     status        TEXT    NOT NULL CHECK (status IN ('Pending', 'Active', 'Suspended')),
+    name          TEXT,
     primary_email TEXT    NOT NULL,
     created_at    INTEGER NOT NULL,
     updated_at    INTEGER NOT NULL,

@@ -3,16 +3,20 @@ use worker::{kv::KvStore, wasm_bindgen::JsValue, Fetch, Method, Request, Request
 
 use crate::{
     application::auth::{jwks_google, session},
-    domain::auth::{
-        authorization::{build_url, AuthorizationRequest},
-        identity::VerifiedIdentity,
-        pkce::code_challenge_s256,
-        provider::{
-            CallbackCtx, IdentityProvider, ProviderError, ProviderFuture, StartCtx, StartResponse,
+    domain::{
+        account::identity::IdentityProvider as AccountIdentityProvider,
+        auth::{
+            authorization::{build_url, AuthorizationRequest},
+            identity::VerifiedIdentity,
+            pkce::code_challenge_s256,
+            provider::{
+                CallbackCtx, IdentityProvider, ProviderError, ProviderFuture, StartCtx,
+                StartResponse,
+            },
+            token::TokenGenerator,
         },
-        token::TokenGenerator,
+        clock::Clock,
     },
-    domain::clock::Clock,
     infrastructure::env::Environment,
 };
 
@@ -83,7 +87,7 @@ impl IdentityProvider for GoogleProvider<'_> {
             .map_err(|e| ProviderError::InvalidGrant(e))?;
 
             Ok(VerifiedIdentity {
-                provider: "google".to_string(),
+                provider: AccountIdentityProvider::Google.as_str().to_string(),
                 subject: claims.sub,
                 email: claims.email,
                 email_verified: claims.email_verified,
