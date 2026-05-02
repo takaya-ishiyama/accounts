@@ -6,7 +6,7 @@ run="npx wrangler dev"
 
 [tasks.migrate-local]
 dir = "db"
-run="atlas schema apply --env local"
+run="wrangler d1 execute DB --local --file db/migrations/20260502024931_init.sql"
 
 [tasks.migrate-diff]
 dir = "db"
