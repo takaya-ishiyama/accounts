@@ -1,5 +1,10 @@
 use crate::{
-    application::auth::oidc_state::OidcStateStoreError, domain::auth::provider::ProviderError,
+    application::{
+        account::read_repository::AccountReadError,
+        auth::{oidc_state::OidcStateStoreError, session_issuer::SessionIssuerError},
+        usecase::commands::bus::CommandBusError,
+    },
+    domain::auth::provider::ProviderError,
 };
 use axum::{
     http::StatusCode,
@@ -23,13 +28,37 @@ impl From<worker::Error> for AppError {
 
 impl From<ProviderError> for AppError {
     fn from(e: ProviderError) -> Self {
-        internal(e.to_string())
+        match e {
+            ProviderError::InvalidGrant(msg) => bad_request(msg),
+            ProviderError::Internal(msg) => internal(msg),
+        }
     }
 }
 
 impl From<OidcStateStoreError> for AppError {
     fn from(e: OidcStateStoreError) -> Self {
         internal(e.to_string())
+    }
+}
+
+impl From<AccountReadError> for AppError {
+    fn from(e: AccountReadError) -> Self {
+        internal(e.to_string())
+    }
+}
+
+impl From<SessionIssuerError> for AppError {
+    fn from(e: SessionIssuerError) -> Self {
+        internal(e.to_string())
+    }
+}
+
+impl From<CommandBusError> for AppError {
+    fn from(e: CommandBusError) -> Self {
+        match e {
+            CommandBusError::DomainError(msg) => bad_request(msg),
+            CommandBusError::Backend(msg) => internal(msg),
+        }
     }
 }
 

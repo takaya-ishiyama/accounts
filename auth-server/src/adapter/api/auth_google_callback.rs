@@ -12,7 +12,17 @@ use crate::{
         http::error::{bad_request, internal, AppError},
         usecase::commands::complete_google_signin::complete_google_signin,
     },
-    infrastructure::oidc_state_store::KvOidcStateStore,
+    infrastructure::{
+        account_read_repository::D1AccountReadRepository,
+        clock::WorkerClock,
+        command_bus::DoCommandBus,
+        env::Environment,
+        id_generator::UuidV7Generator,
+        oidc_state_store::KvOidcStateStore,
+        providers::google::GoogleProvider,
+        random::GetRandomTokenGenerator,
+        session_issuer::EnvSessionIssuer,
+    },
     AppState,
 };
 
@@ -28,12 +38,11 @@ pub fn router(
     Query(query): Query<CallbackQuery>,
 ) -> SendFuture<impl Future<Output = Result<Response, AppError>>> {
     SendFuture::new(async move {
-        let e = &state.env;
+        let env = &state.env;
 
         if let Some(error) = query.error {
             return Err(bad_request(error));
         }
-        let kv = e.kv("KV")?;
 
         let code = query
             .code
@@ -44,10 +53,34 @@ pub fn router(
             .as_deref()
             .ok_or_else(|| bad_request("missing_state"))?;
 
+        let environment = Environment::load(env)?;
+        let kv = env.kv("KV")?;
+        let clock = WorkerClock;
+        let ids = UuidV7Generator;
+        let tokens = GetRandomTokenGenerator;
+        let provider = GoogleProvider {
+            env: &environment,
+            kv: &kv,
+            tokens: &tokens,
+            clock: &clock,
+        };
         let oidc_state_store = KvOidcStateStore::new(&kv);
+        let accounts = D1AccountReadRepository { env };
+        let commands = DoCommandBus { env };
+        let sessions = EnvSessionIssuer::load(env, &clock, &ids)?;
 
-        let completed =
-            complete_google_signin(&state.env, code, &oidc_state_store, state_key).await?;
+        let completed = complete_google_signin(
+            &provider,
+            &oidc_state_store,
+            &accounts,
+            &commands,
+            &sessions,
+            &clock,
+            &ids,
+            code,
+            state_key,
+        )
+        .await?;
 
         Ok(redirect_with_session(
             &completed.return_to,

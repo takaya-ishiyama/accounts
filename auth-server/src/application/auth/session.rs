@@ -4,8 +4,6 @@ use rsa::signature::{SignatureEncoding, Signer as _, Verifier as _};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
-use crate::infrastructure::{ids::new_uuid_v7, time::now_ms};
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JwtClaims {
     pub iss: String,
@@ -23,13 +21,12 @@ pub fn issue_jwt(
     issuer: &str,
     audience: &str,
     ttl_secs: u64,
+    now_secs: i64,
+    jti: String,
 ) -> Result<String, String> {
     let private_key =
         RsaPrivateKey::from_pkcs8_pem(private_key_pem).map_err(|e| e.to_string())?;
     let signing_key = SigningKey::<Sha256>::new(private_key);
-
-    let now_secs = now_ms() / 1000;
-    let jti = new_uuid_v7();
 
     let header = serde_json::json!({ "alg": "RS256", "typ": "JWT", "kid": kid });
     let payload = serde_json::json!({
@@ -57,6 +54,7 @@ pub fn verify_session(
     key_pems: &[&str],
     issuer: &str,
     audience: &str,
+    now_secs: i64,
 ) -> Result<JwtClaims, String> {
     let parts: Vec<&str> = token.splitn(3, '.').collect();
     if parts.len() != 3 {
@@ -69,7 +67,6 @@ pub fn verify_session(
     let claims: JwtClaims =
         serde_json::from_slice(&payload_bytes).map_err(|e| e.to_string())?;
 
-    let now_secs = now_ms() / 1000;
     if claims.exp <= now_secs {
         return Err("token expired".to_string());
     }
@@ -108,6 +105,7 @@ pub fn verify_google_id_token(
     e_b64: &str,
     expected_aud: &str,
     expected_nonce: &str,
+    now_secs: i64,
 ) -> Result<GoogleIdClaims, String> {
     let parts: Vec<&str> = token.splitn(3, '.').collect();
     if parts.len() != 3 {
@@ -120,7 +118,6 @@ pub fn verify_google_id_token(
     let claims: GoogleIdClaims =
         serde_json::from_slice(&payload_bytes).map_err(|e| e.to_string())?;
 
-    let now_secs = now_ms() / 1000;
     if claims.exp <= now_secs {
         return Err("id_token expired".to_string());
     }
