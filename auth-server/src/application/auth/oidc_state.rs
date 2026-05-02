@@ -6,6 +6,8 @@ pub struct OidcStateValue {
     pub code_verifier: String,
     pub nonce: String,
     pub return_to: String,
+    #[serde(default)]
+    pub audience: String,
 }
 
 pub type OidcStateStoreResult<T> = Result<T, OidcStateStoreError>;

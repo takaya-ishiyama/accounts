@@ -79,6 +79,7 @@ pub fn router(
             &ids,
             code,
             state_key,
+            &environment.default_audience,
         )
         .await?;
 

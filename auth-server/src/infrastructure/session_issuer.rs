@@ -12,7 +12,6 @@ use crate::{
 struct SessionConfig {
     private_key: String,
     issuer: String,
-    audience: String,
     ttl_secs: u64,
 }
 
@@ -33,7 +32,6 @@ impl<'a> EnvSessionIssuer<'a> {
             config: SessionConfig {
                 private_key: secret(env, "JWT_PRIVATE_KEY")?,
                 issuer: var(env, "JWT_ISSUER")?,
-                audience: var(env, "JWT_DEFAULT_AUDIENCE")?,
                 ttl_secs,
             },
             clock,
@@ -43,7 +41,7 @@ impl<'a> EnvSessionIssuer<'a> {
 }
 
 impl SessionIssuer for EnvSessionIssuer<'_> {
-    fn issue(&self, account_id: &str) -> Result<IssuedSession, SessionIssuerError> {
+    fn issue(&self, account_id: &str, audience: &str) -> Result<IssuedSession, SessionIssuerError> {
         let now_secs = self.clock.now_ms() / 1000;
         let jti = self.ids.new_id();
         let jwt = session::issue_jwt(
@@ -51,7 +49,7 @@ impl SessionIssuer for EnvSessionIssuer<'_> {
             "v1",
             account_id,
             &self.config.issuer,
-            &self.config.audience,
+            audience,
             self.config.ttl_secs,
             now_secs,
             jti,

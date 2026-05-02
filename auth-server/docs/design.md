@@ -122,7 +122,8 @@ flowchart LR
 | `GOOGLE_CLIENT_ID` | Var | Google OAuth クライアント ID |
 | `OAUTH_REDIRECT_URI` | Var | コールバック URI |
 | `JWT_ISSUER` | Var | JWT `iss` クレーム（例: `https://auth.example.com`） |
-| `JWT_DEFAULT_AUDIENCE` | Var | JWT `aud` クレーム（例: `"app-api"`）。マルチサービス時は動的解決へ移行 |
+| `JWT_DEFAULT_AUDIENCE` | Var | JWT `aud` のデフォルト値（`audience` クエリ未指定時に使用） |
+| `ALLOWED_AUDIENCES` | Var | JWT `aud` の許可リスト（カンマ区切り）。未設定時は `JWT_DEFAULT_AUDIENCE` のみを許可 |
 | `SESSION_TTL_SECS` | Var | JWT 有効期間（デフォルト 3600） |
 
 ---
@@ -326,8 +327,9 @@ sequenceDiagram
     participant DO as AccountDO
     participant D as D1
 
-    B->>W: GET /auth/google/start
-    W->>K: PUT state → {code_verifier, nonce, return_to} TTL=10min
+    B->>W: GET /auth/google/start?return_to=...&audience=<service-id>
+    W->>W: audience を ALLOWED_AUDIENCES で検証（許可リスト外なら 400）
+    W->>K: PUT state → {code_verifier, nonce, return_to, audience} TTL=10min
     W->>B: 302 Redirect → Google 認可 URL (state, code_challenge, nonce)
 
     B->>G: 認可リクエスト
@@ -357,7 +359,8 @@ sequenceDiagram
 {
   "code_verifier": "...",   // PKCE S256 の元値
   "nonce":         "...",   // ID トークン nonce
-  "return_to":     "/dashboard"
+  "return_to":     "/dashboard",
+  "audience":      "app-api"  // 発行するJWTのaud。未指定時はJWT_DEFAULT_AUDIENCEで補完
 }
 ```
 
@@ -421,8 +424,11 @@ Google は `hd`（ホステッドドメイン）以外のアカウントで稀�
 
 `aud` に汎用的な `"default"` を使うと、複数のリソースサーバーが同じ `aud` を受け入れることになり、Service A 向けのトークンが Service B でも有効になるトークン混用攻撃が成立する。
 
-- **day-1**: `JWT_DEFAULT_AUDIENCE` Var（例: `"app-api"`）を固定値として使用。各リソースサーバーはこの値のみを受け入れるよう設定する
-- **将来（マルチサービス対応）**: `/auth/google/start?audience=<service-id>` パラメータを受け取り、auth-server に登録済みのサービス識別子リスト（`ALLOWED_AUDIENCES` Var）と照合してから `aud` にセットする。未登録の `audience` はログイン開始時点でエラーを返す
+- `ALLOWED_AUDIENCES` Var（カンマ区切り）に登録済みのサービス識別子のみを `aud` として発行できる
+- `/auth/google/start?audience=<service-id>` でクライアントが使用するサービスを指定。未指定時は `JWT_DEFAULT_AUDIENCE` にフォールバック
+- 許可リスト外の `audience` を指定した場合はログイン開始時点で `400 {"error":"invalid_audience"}` を返す（攻撃面の最小化）
+- 発行する JWT の `aud` は**単一文字列**を維持（配列化しない）
+- `ALLOWED_AUDIENCES` 未設定時は `JWT_DEFAULT_AUDIENCE` のみを許可リストとして動作（後方互換）
 
 各リソースサーバー側では §9.4 の検証ステップで **`aud` が自サービス識別子と完全一致すること**を必須とし、`"default"` や `*` など曖昧な値での受け入れを禁止する。
 
@@ -432,7 +438,7 @@ Google は `hd`（ホステッドドメイン）以外のアカウントで稀�
 
 | Method | Path | 用途 |
 |---|---|---|
-| `GET` | `/auth/google/start` | OIDC 開始（state 採番 → 認可 URL へリダイレクト） |
+| `GET` | `/auth/google/start` | OIDC 開始（state 採番 → 認可 URL へリダイレクト）。クエリ: `?return_to=<path>&audience=<service-id>`。`audience` が `ALLOWED_AUDIENCES` 外なら `400 invalid_audience` |
 | `GET` | `/auth/google/callback` | コード交換・ID トークン検証・コマンド投入・セッション発行 |
 | `POST` | `/auth/logout` | セッションクッキー削除 |
 | `GET` | `/me` | 自アカウント情報 + 連携 Identity 一覧（D1 read） |
@@ -708,7 +714,8 @@ id      = "<KV_NAMESPACE_ID>"   # wrangler kv namespace create で取得
 GOOGLE_CLIENT_ID      = "<YOUR_CLIENT_ID>"
 OAUTH_REDIRECT_URI    = "https://auth.example.com/auth/google/callback"
 JWT_ISSUER            = "https://auth.example.com"
-JWT_DEFAULT_AUDIENCE  = "app-api"   # 具体的なサービス識別子を設定すること
+JWT_DEFAULT_AUDIENCE  = "app-api"   # audience クエリ未指定時のデフォルト
+ALLOWED_AUDIENCES     = "app-api"   # カンマ区切りで複数サービスを登録可能（例: "app-api,admin-api"）
 SESSION_TTL_SECS      = "3600"
 ```
 

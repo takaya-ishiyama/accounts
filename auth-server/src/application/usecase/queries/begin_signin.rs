@@ -17,6 +17,7 @@ pub async fn begin_signin(
     provider: &dyn IdentityProvider,
     oidc_state_store: &dyn OidcStateStore,
     return_to_raw: &str,
+    audience: &str,
 ) -> Result<SignInRedirect, AppError> {
     let sanitized = return_to::sanitize(return_to_raw).into_owned();
 
@@ -31,6 +32,7 @@ pub async fn begin_signin(
                 code_verifier: resp.code_verifier,
                 nonce: resp.nonce,
                 return_to: sanitized,
+                audience: audience.to_string(),
             },
         )
         .await?;

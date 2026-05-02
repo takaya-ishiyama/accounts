@@ -31,6 +31,7 @@ pub async fn complete_google_signin(
     ids: &dyn IdGenerator,
     code: &str,
     state_key: &str,
+    default_audience: &str,
 ) -> Result<CompletedGoogleSignin, AppError> {
     let oidc_state = oidc_state_store
         .load_and_delete(state_key)
@@ -62,7 +63,13 @@ pub async fn complete_google_signin(
         occurred_at: clock.now_ms(),
     };
     let response = commands.dispatch(&account_id, &cmd).await?;
-    let issued = sessions.issue(&response.account_id)?;
+
+    let audience = if oidc_state.audience.is_empty() {
+        default_audience
+    } else {
+        &oidc_state.audience
+    };
+    let issued = sessions.issue(&response.account_id, audience)?;
 
     Ok(CompletedGoogleSignin {
         return_to: return_to::sanitize(&oidc_state.return_to).into_owned(),

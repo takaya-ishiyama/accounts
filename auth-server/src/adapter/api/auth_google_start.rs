@@ -7,7 +7,8 @@ use std::future::Future;
 use worker::send::SendFuture;
 
 use crate::{
-    application::{http::error::AppError, usecase::queries::begin_signin::begin_signin},
+    application::{http::error::{bad_request, internal, AppError}, usecase::queries::begin_signin::begin_signin},
+    domain::auth::audience::AudienceError,
     infrastructure::{
         clock::WorkerClock,
         env::Environment,
@@ -21,6 +22,7 @@ use crate::{
 #[derive(Deserialize)]
 pub struct StartQuery {
     return_to: Option<String>,
+    audience: Option<String>,
 }
 
 pub fn router(
@@ -34,6 +36,15 @@ pub fn router(
         let return_to = query.return_to.as_deref().unwrap_or("/");
         let clock = WorkerClock;
         let tokens = GetRandomTokenGenerator;
+
+        let audience = environment
+            .allowed_audiences
+            .select(query.audience.as_deref(), &environment.default_audience)
+            .map_err(|e| match e {
+                AudienceError::Unknown(_) => bad_request("invalid_audience"),
+                _ => internal(e.to_string()),
+            })?;
+
         let provider = GoogleProvider {
             env: &environment,
             kv: &kv,
@@ -41,7 +52,7 @@ pub fn router(
             clock: &clock,
         };
         let oidc_state_store = KvOidcStateStore::new(&kv);
-        let redirect = begin_signin(&provider, &oidc_state_store, return_to).await?;
+        let redirect = begin_signin(&provider, &oidc_state_store, return_to, audience).await?;
         Ok(Redirect::to(&redirect.url))
     })
 }
