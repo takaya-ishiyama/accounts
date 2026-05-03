@@ -6,10 +6,7 @@ use crate::{
         usecase::commands::{bus::CommandBus, dto::CommandDto},
     },
     domain::{
-        auth::{
-            provider::{CallbackCtx, IdentityProvider},
-            return_to,
-        },
+        auth::provider::{CallbackCtx, IdentityProvider},
         clock::Clock,
         id_generator::IdGenerator,
     },
@@ -71,8 +68,10 @@ pub async fn complete_google_signin(
     };
     let issued = sessions.issue(&response.account_id, audience)?;
 
+    // return_to was already validated in begin_signin and stored server-side in KV;
+    // re-sanitizing here would incorrectly reject allowed absolute URLs from dev environments.
     Ok(CompletedGoogleSignin {
-        return_to: return_to::sanitize(&oidc_state.return_to).into_owned(),
+        return_to: oidc_state.return_to,
         jwt: issued.jwt,
         ttl_secs: issued.ttl_secs,
     })

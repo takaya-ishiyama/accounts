@@ -18,8 +18,11 @@ pub async fn begin_signin(
     oidc_state_store: &dyn OidcStateStore,
     return_to_raw: &str,
     audience: &str,
+    allowed_return_to_origins: &[&str],
 ) -> Result<SignInRedirect, AppError> {
-    let sanitized = return_to::sanitize(return_to_raw).into_owned();
+    let sanitized =
+        return_to::sanitize_with_allowed_origins(return_to_raw, allowed_return_to_origins)
+            .into_owned();
 
     let resp = provider.start(&StartCtx {
         return_to: &sanitized,

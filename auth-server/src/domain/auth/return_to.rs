@@ -1,12 +1,40 @@
 use std::borrow::Cow;
 
 pub fn sanitize(raw: &str) -> Cow<'_, str> {
-    let decoded = percent_decode(raw);
-    if decoded.starts_with('/') && !decoded.starts_with("//") && !decoded.contains('\\') {
+    if is_safe_path(raw) {
         Cow::Borrowed(raw)
     } else {
         Cow::Owned("/".to_string())
     }
+}
+
+/// Like `sanitize`, but also accepts absolute URLs whose origin is in `allowed_origins`.
+/// Use this in development/staging where the auth-server and the app run on different hosts.
+pub fn sanitize_with_allowed_origins<'a>(raw: &'a str, allowed_origins: &[&str]) -> Cow<'a, str> {
+    if is_safe_path(raw) {
+        return Cow::Borrowed(raw);
+    }
+    if !allowed_origins.is_empty() {
+        if let Some(origin) = extract_origin(raw) {
+            if allowed_origins.iter().any(|&o| o == origin) {
+                return Cow::Borrowed(raw);
+            }
+        }
+    }
+    Cow::Owned("/".to_string())
+}
+
+fn is_safe_path(s: &str) -> bool {
+    let decoded = percent_decode(s);
+    decoded.starts_with('/') && !decoded.starts_with("//") && !decoded.contains('\\')
+}
+
+fn extract_origin(url: &str) -> Option<String> {
+    let (scheme, rest) = url.split_once("://")?;
+    let host_end = rest
+        .find(['/', '?', '#'])
+        .unwrap_or(rest.len());
+    Some(format!("{}://{}", scheme, &rest[..host_end]))
 }
 
 fn percent_decode(s: &str) -> String {
@@ -70,5 +98,45 @@ mod tests {
     #[test]
     fn rejects_absolute_url() {
         assert_eq!(sanitize("https://evil.com").as_ref(), "/");
+    }
+
+    #[test]
+    fn allowed_origin_accepts_absolute_url() {
+        let allowed = ["http://localhost:5173"];
+        assert_eq!(
+            sanitize_with_allowed_origins("http://localhost:5173/api/auth/callback", &allowed).as_ref(),
+            "http://localhost:5173/api/auth/callback"
+        );
+    }
+
+    #[test]
+    fn allowed_origin_rejects_unknown_absolute_url() {
+        let allowed = ["http://localhost:5173"];
+        assert_eq!(
+            sanitize_with_allowed_origins("https://evil.com/steal", &allowed).as_ref(),
+            "/"
+        );
+    }
+
+    #[test]
+    fn allowed_origin_still_accepts_relative_paths() {
+        let allowed = ["http://localhost:5173"];
+        assert_eq!(
+            sanitize_with_allowed_origins("/dashboard", &allowed).as_ref(),
+            "/dashboard"
+        );
+    }
+
+    #[test]
+    fn extract_origin_works() {
+        assert_eq!(
+            extract_origin("http://localhost:5173/api/auth/callback"),
+            Some("http://localhost:5173".to_string())
+        );
+        assert_eq!(
+            extract_origin("https://example.com/path?q=1"),
+            Some("https://example.com".to_string())
+        );
+        assert_eq!(extract_origin("/relative"), None);
     }
 }

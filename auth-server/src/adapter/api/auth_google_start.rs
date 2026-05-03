@@ -52,7 +52,13 @@ pub fn router(
             clock: &clock,
         };
         let oidc_state_store = KvOidcStateStore::new(&kv);
-        let redirect = begin_signin(&provider, &oidc_state_store, return_to, audience).await?;
+        let origins: Vec<&str> = environment
+            .allowed_return_to_origins
+            .iter()
+            .map(String::as_str)
+            .collect();
+        let redirect =
+            begin_signin(&provider, &oidc_state_store, return_to, audience, &origins).await?;
         Ok(Redirect::to(&redirect.url))
     })
 }
