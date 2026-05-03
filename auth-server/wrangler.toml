@@ -48,14 +48,6 @@ dead_letter_queue = "auth-queue-local-dlq"
 
 [env.staging]
 
-[env.staging.vars]
-GOOGLE_CLIENT_ID     = "<replace-me>"
-OAUTH_REDIRECT_URI   = "https://staging.example.com/auth/google/callback"
-JWT_ISSUER           = "https://staging.example.com"
-JWT_DEFAULT_AUDIENCE = "app-api"
-ALLOWED_AUDIENCES    = "app-api"
-SESSION_TTL_SECS     = "3600"
-
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "auth-db-staging"
