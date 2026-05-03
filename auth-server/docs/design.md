@@ -96,8 +96,8 @@ flowchart LR
     Browser -->|"Authorization: Bearer JWT"| AppAPI
     AppAPI -->|"GET /.well-known/jwks.json\n(キャッシュ更新時のみ)"| Router
     AppAPI -.->|"公開鍵で JWT 検証\n(オフライン・ネットワーク不要)"| AppAPI
-    Router -->|"コマンド投入"| AccountDO
-    Router -->|"クエリ"| D1
+    Router -->|"コマンド投入 / stale時フォールバック read"| AccountDO
+    Router -->|"通常クエリ"| D1
     Router <-->|"state / JWKS キャッシュ"| KV
     Router <-->|"認可コード交換"| Google
     AccountDO -->|"イベント enqueue"| Queue
@@ -125,6 +125,15 @@ flowchart LR
 | `JWT_DEFAULT_AUDIENCE` | Var | JWT `aud` のデフォルト値（`audience` クエリ未指定時に使用） |
 | `ALLOWED_AUDIENCES` | Var | JWT `aud` の許可リスト（カンマ区切り）。未設定時は `JWT_DEFAULT_AUDIENCE` のみを許可 |
 | `SESSION_TTL_SECS` | Var | JWT 有効期間（デフォルト 3600） |
+
+### 整合性モデル
+
+本設計は CQRS + イベントソーシングを採用し、Durable Object を Account 集約の正とする。D1 は Queue consumer によって非同期更新されるリードモデルであり、**最新状態への反映遅延を許容する projection** として扱う。
+
+- コマンド処理・不変条件の判定・セキュリティ上クリティカルな現在状態は AccountDO を正とする
+- 通常の参照は D1 を優先し、低レイテンシ・高スループットの read path とする
+- 認証直後や Queue lag 中に D1 が未反映または古い場合は、AccountDO へフォールバックして read-your-writes を保証する
+- D1 に行が存在しないことだけでは「存在しない Account」と断定しない。セッションが有効であれば projection lag の可能性があるため AccountDO で確認する
 
 ---
 
@@ -236,6 +245,18 @@ env.EVENTS_QUEUE.send_batch(&result).await?;
 
 **スナップショット**: day-1 では実装しない（1アカウントのイベント数はごく少数のため）。将来 N=50 イベントごとに `snapshot:{version}` を保存する拡張ポイントを設ける。
 
+### Durable Object read API
+
+AccountDO はコマンド投入用の write API に加えて、`/me` fallback 用の read-only API を持つ。
+
+```
+GET /accounts/{account_id}/current
+→ Account 集約イベントをリプレイして current view を返す
+→ イベント追加・outbox 更新・D1 同期書き込みは行わない
+```
+
+この API は通常 read path ではなく、D1 が存在しない、または D1 の `accounts.version` が要求バージョンに満たない場合のみ呼び出す。AccountDO 側では必要に応じて `cmd:{idempotency_key}` とは別に `view:current` キャッシュを持ってよいが、キャッシュはイベント追加後に同一 transaction 内で無効化または更新する。
+
 ---
 
 ## 5. リードモデル（D1）スキーマ
@@ -269,11 +290,14 @@ CREATE TABLE processed_events (
 );
 ```
 
+`accounts.version` は Account 集約のイベントシーケンスを投影した値であり、D1 の鮮度判定に使う。`/me` など read-your-writes が必要な API は、セッションに含まれる `account_version` と D1 の `accounts.version` を比較し、D1 が必要バージョンに追いついている場合のみ D1 の結果を返す。
+
 ### D1 固有の注意点
 
 - `PRAGMA foreign_keys = ON` は接続ごとに設定が必要（D1 はデフォルト OFF）
 - `ALTER TABLE ... DROP COLUMN` は sqlite 3.35+ が必要。D1 のバージョンを事前確認すること
 - 外部キー制約は設計に記載するが、D1 側のランタイムで有効化するまではアプリ側で整合性を保つ
+- D1 は非同期 projection であり、Queue lag 中は古い値を返しうる。読み取り側は `version` による鮮度判定を行う
 
 ---
 
@@ -312,6 +336,16 @@ AccountDO
 
 **順序保証**: CF Queue は per-key 順序を保証しないため、`UPDATE accounts SET ... WHERE version < :new_version` のように古いバージョンを上書きしない条件を入れ、順序逆転に耐える。
 
+**read-your-writes**: Queue 反映完了を同期的には待たない。コマンド完了レスポンスには AccountDO が確定した `account_id` と `account_version` を含め、セッション JWT にも `account_version` を埋め込む。読み取り側は D1 の `version` が要求バージョン未満の場合に AccountDO から現在状態を取得する。
+
+**観測指標**:
+
+- `projection_lag_ms`: `processed_at - occurred_at`
+- `/me` の D1 hit 率
+- `/me` の AccountDO fallback 率
+- AccountDO fallback 時の p50/p95/p99 レイテンシ
+- DLQ 件数と event type 別の失敗数
+
 ---
 
 ## 7. 認証フロー（Google OIDC）
@@ -348,7 +382,7 @@ sequenceDiagram
     else 新規
         W->>DO: SignInWithGoogle (AccountRegistered + GoogleIdentityLinked)
     end
-    DO->>W: {account_id, is_new}
+    DO->>W: {account_id, account_version, is_new}
     W->>W: return_to を許可リスト検証（不正ならデフォルト "/" にフォールバック）
     W->>B: 302 Redirect + Set-Cookie: __Host-session=<JWT>
 ```
@@ -409,7 +443,8 @@ Google は `hd`（ホステッドドメイン）以外のアカウントで稀�
   "kid": "v1",                         // 署名鍵バージョン（JWKS の kid と対応）
   "iat": 1745000000,
   "exp": 1745003600,
-  "jti": "01JGVS..."                   // ランダム（将来の revoke 用）
+  "jti": "01JGVS...",                  // ランダム（将来の revoke 用）
+  "account_version": 1                 // 発行時点で read-your-writes に必要な最小 Account version
 }
 ```
 
@@ -419,6 +454,7 @@ Google は `hd`（ホステッドドメイン）以外のアカウントで稀�
 - 有効期間: `SESSION_TTL_SECS`（デフォルト 3600 秒）
 - クッキー: `__Host-session; Secure; HttpOnly; SameSite=Lax; Path=/`
 - リフレッシュ: day-1 では未実装。期限切れ時は再 OIDC フローを踏む
+- `account_version` は auth-server 内の `/me` 鮮度判定に使う。リソースサーバー側の認可判定には使わず、通常は `iss` / `aud` / `exp` / `sub` の検証のみでよい
 
 #### `aud` の設計方針（トークン混用攻撃対策）
 
@@ -441,7 +477,7 @@ Google は `hd`（ホステッドドメイン）以外のアカウントで稀�
 | `GET` | `/auth/google/start` | OIDC 開始（state 採番 → 認可 URL へリダイレクト）。クエリ: `?return_to=<path>&audience=<service-id>`。`audience` が `ALLOWED_AUDIENCES` 外なら `400 invalid_audience` |
 | `GET` | `/auth/google/callback` | コード交換・ID トークン検証・コマンド投入・セッション発行 |
 | `POST` | `/auth/logout` | セッションクッキー削除 |
-| `GET` | `/me` | 自アカウント情報 + 連携 Identity 一覧（D1 read） |
+| `GET` | `/me` | 自アカウント情報 + 連携 Identity 一覧（D1 read + stale時 AccountDO fallback） |
 | `POST` | `/me/identities/google/unlink` | `UnlinkIdentity` コマンド投入 |
 | `GET` | `/.well-known/jwks.json` | **公開鍵セット（RFC 7517）。アプリ API が JWT 検証に使用** |
 | `GET` | `/.well-known/openid-configuration` | Discovery（`issuer`, `jwks_uri` 等の最小実装） |
@@ -461,11 +497,37 @@ Google は `hd`（ホステッドドメイン）以外のアカウントで稀�
   "id":            "01JGVQ...",
   "status":        "Active",
   "primary_email": "user@example.com",
+  "version":       1,
   "identities": [
     { "provider": "google", "subject": "108...", "email": "...", "email_verified": true }
   ]
 }
 ```
+
+### `/me` の読み取り戦略
+
+`/me` は通常 D1 から読む。認証直後は Queue → D1 projection が未反映の可能性があるため、セッション JWT の `sub` と `account_version` を使って D1 の鮮度を判定する。
+
+```rust
+// 疑似コード
+let session = verify_session(cookie)?;
+let view = d1.get_account_with_identities(&session.sub).await?;
+
+if let Some(view) = view {
+    if view.version >= session.account_version {
+        return Ok(view);
+    }
+}
+
+let fresh = account_do.read_current_account(&session.sub).await?;
+Ok(fresh)
+```
+
+- D1 に行がない場合、または `accounts.version < session.account_version` の場合は AccountDO にフォールバックする
+- AccountDO fallback は read-only fetch とし、イベント追加や D1 への同期書き込みは行わない
+- fallback 結果を返した後、必要に応じて projection repair 用の Queue message を投げてもよい。ただし day-1 では outbox/alarm と DLQ 監視を優先し、同期 repair は必須にしない
+- この方式が保証するのは「セッション発行時点の自分の書き込みを読めること」であり、セッション発行後に別経路で行われた停止・更新を常に即時反映するものではない
+- `Suspended` などセキュリティ判断に関わる状態が将来 `/me` 以外の認可に使われる場合、その判定は D1 の古い値に依存させず AccountDO または短命セッションメタデータで行う
 
 ---
 
@@ -623,7 +685,7 @@ auth-server/
     ├── http/
     │   ├── mod.rs          # axum Router 組み立て
     │   ├── auth.rs         # /auth/:provider/* ハンドラ
-    │   ├── me.rs           # /me ハンドラ
+    │   ├── me.rs           # /me ハンドラ（D1-first / stale時 AccountDO fallback）
     │   ├── well_known.rs   # /.well-known/jwks.json, /openid-configuration
     │   └── error.rs        # axum エラーマッピング
     ├── auth/
@@ -637,7 +699,7 @@ auth-server/
     ├── commands/
     │   ├── mod.rs
     │   ├── dto.rs          # コマンド DTO
-    │   └── dispatcher.rs   # DO スタブ呼び出し
+    │   └── dispatcher.rs   # DO スタブ呼び出し（command + fallback read）
     ├── domain/
     │   ├── mod.rs
     │   ├── account.rs      # Account 集約（状態）
@@ -645,13 +707,13 @@ auth-server/
     │   └── logic.rs        # decide(state, cmd) → Vec<Event>, apply(state, ev) → state
     ├── durable/
     │   ├── mod.rs
-    │   └── account_do.rs   # AccountDO: fetch ハンドラ, ストレージ操作, outbox
+    │   └── account_do.rs   # AccountDO: fetch ハンドラ, ストレージ操作, outbox, fallback read
     ├── projections/
     │   ├── mod.rs
     │   └── consumer.rs     # Queue consumer, D1 UPSERT
     ├── queries/
     │   ├── mod.rs
-    │   └── account.rs      # /me 向け D1 read
+    │   └── account.rs      # /me 向け D1 read（version を含めて返す）
     └── infra/
         ├── mod.rs
         ├── env.rs          # バインディング取得ヘルパ
@@ -891,6 +953,7 @@ fn sign_in_new_account_emits_account_registered() {
 - `wrangler dev --local`（miniflare 内蔵）で実 DO を起動
 - `tests/` 配下に Worker を置き、`POST /commands/sign-in-with-google` を HTTP で叩く
 - DO ストレージを `wrangler dev` の DevTools で検査
+- `GET /accounts/{account_id}/current` がイベントリプレイ後の current view を返し、イベント・outbox を追加しないことを確認
 
 ### プロジェクタテスト
 
@@ -905,6 +968,8 @@ wrangler d1 execute READ_DB --local \
 
 - Google の `discovery`, `/token`, `/certs` をモック Worker で立てる
 - フル sign-in フロー（`/auth/google/start` → callback → `/me`）を自動化
+- callback 直後に D1 projection を意図的に遅延させ、`/me` が AccountDO fallback で成功することを確認
+- D1 の `accounts.version >= session.account_version` になった後は `/me` が D1 だけで成功することを確認
 - `wrangler dev --local` 環境で完結させる（外部 Google への通信なし）
 
 ### イベントスキーマ・スナップショット
@@ -950,7 +1015,7 @@ open "http://localhost:8787/auth/google/start"
 
 # 3. 自アカウント取得
 curl -b "__Host-session=<token>" http://localhost:8787/me
-# → { "id": "...", "status": "Active", "identities": [...] }
+# → { "id": "...", "status": "Active", "version": 1, "identities": [...] }
 
 # 4. D1 状態確認
 npx wrangler d1 execute READ_DB --local \
@@ -966,6 +1031,8 @@ npx wrangler tail --format pretty
 - [ ] `/healthz` が 200 を返す
 - [ ] Google 認可 → callback で `__Host-session` クッキーがセットされる
 - [ ] `/me` がアカウント情報と Identity を返す
+- [ ] callback 直後に D1 未反映でも `/me` が AccountDO fallback で 200 を返す
+- [ ] D1 反映後は `/me` が D1 read で 200 を返し、`version >= session.account_version` を満たす
 - [ ] D1 `accounts` + `identities` に行が挿入されている
 - [ ] DO ストレージに `event:00000000000000000001` が存在する
 - [ ] `processed_events` にイベント ID が記録されている
