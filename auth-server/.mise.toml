@@ -1,2 +1,28 @@
+[settings]
+env = ["local"]
+
 [tasks.dev]
 run="npx wrangler dev"
+
+[tasks.migrate-local]
+dir = "db"
+run="wrangler d1 execute DB --local --file db/migrations/20260502024931_init.sql"
+
+[tasks.migrate-diff]
+dir = "db"
+run="atlas migrate diff --env local"
+
+[tasks.migrate-staging]
+dir = "db"
+run="wrangler d1 migrations apply auth-db-staging --remote --env staging"
+
+[tasks.deploy-staging]
+run="MISE_ENV=staging wrangler deploy --minify --env staging"
+
+[tasks.migrate-production]
+dir = "db"
+run="wrangler d1 migrations apply auth-db-production --remote --env production"
+
+[tasks.deploy-production]
+run="MISE_ENV=production wrangler deploy --minify --env production"
+
