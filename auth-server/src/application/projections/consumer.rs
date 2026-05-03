@@ -3,6 +3,10 @@ use worker::{wasm_bindgen::JsValue, Env, MessageBatch, MessageExt, Result};
 use crate::domain::events::{EventEnvelope, EventPayload};
 use crate::infrastructure::time::now_ms;
 
+fn d1_int(value: i64) -> JsValue {
+    JsValue::from(value as f64)
+}
+
 pub async fn handle_batch(batch: MessageBatch<EventEnvelope>, env: &Env) -> Result<()> {
     let messages = batch.messages()?;
     let db = env.d1("DB")?;
@@ -13,7 +17,7 @@ pub async fn handle_batch(batch: MessageBatch<EventEnvelope>, env: &Env) -> Resu
             .prepare(
                 "INSERT OR IGNORE INTO processed_events (event_id, processed_at) VALUES (?1, ?2)",
             )
-            .bind(&[JsValue::from_str(&ev.event_id), JsValue::from(now_ms())])?
+            .bind(&[JsValue::from_str(&ev.event_id), d1_int(now_ms())])?
             .run()
             .await?;
 
@@ -48,7 +52,7 @@ async fn project(ev: &EventEnvelope, env: &Env) -> Result<()> {
             .bind(&[
                 JsValue::from_str(aggregate_id),
                 JsValue::from_str(primary_email),
-                JsValue::from(now),
+                d1_int(now),
                 JsValue::from(ev.version as f64),
             ])?
             .run()
@@ -63,7 +67,7 @@ async fn project(ev: &EventEnvelope, env: &Env) -> Result<()> {
                 JsValue::from_str(aggregate_id),
                 JsValue::from_str(identity.email()),
                 JsValue::from(identity.email_verified() as i32),
-                JsValue::from(identity.linked_at()),
+                d1_int(identity.linked_at()),
             ])?
             .run()
             .await?;
@@ -78,7 +82,7 @@ async fn project(ev: &EventEnvelope, env: &Env) -> Result<()> {
                 JsValue::from_str(aggregate_id),
                 JsValue::from_str(identity.email()),
                 JsValue::from(identity.email_verified() as i32),
-                JsValue::from(identity.linked_at()),
+                d1_int(identity.linked_at()),
             ])?
             .run()
             .await?;
@@ -115,7 +119,7 @@ async fn project(ev: &EventEnvelope, env: &Env) -> Result<()> {
             )
             .bind(&[
                 JsValue::from_str(new_email),
-                JsValue::from(now),
+                d1_int(now),
                 JsValue::from(ev.version as f64),
                 JsValue::from_str(aggregate_id),
             ])?
@@ -127,7 +131,7 @@ async fn project(ev: &EventEnvelope, env: &Env) -> Result<()> {
                 "UPDATE accounts SET status = 'Suspended', updated_at = ?1, version = ?2 WHERE id = ?3 AND version < ?2",
             )
             .bind(&[
-                JsValue::from(now),
+                d1_int(now),
                 JsValue::from(ev.version as f64),
                 JsValue::from_str(aggregate_id),
             ])?
@@ -139,7 +143,7 @@ async fn project(ev: &EventEnvelope, env: &Env) -> Result<()> {
                 "UPDATE accounts SET status = 'Active', updated_at = ?1, version = ?2 WHERE id = ?3 AND version < ?2",
             )
             .bind(&[
-                JsValue::from(now),
+                d1_int(now),
                 JsValue::from(ev.version as f64),
                 JsValue::from_str(aggregate_id),
             ])?
@@ -159,7 +163,7 @@ async fn update_account_version(
 ) -> Result<()> {
     db.prepare("UPDATE accounts SET updated_at = ?1, version = ?2 WHERE id = ?3 AND version < ?2")
         .bind(&[
-            JsValue::from(now),
+            d1_int(now),
             JsValue::from(version as f64),
             JsValue::from_str(account_id),
         ])?
