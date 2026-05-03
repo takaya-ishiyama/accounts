@@ -52,6 +52,12 @@ dead_letter_queue = "auth-queue-local-dlq"
 
 [env.staging]
 
+[env.staging.vars]
+OAUTH_REDIRECT_URI="https://auth-server-staging.cook-note.workers.dev/auth/google/callback"
+JWT_ISSUER="https://auth-server-staging.cook-note.workers.dev"
+JWT_DEFAULT_AUDIENCE="app-api"
+ALLOWED_AUDIENCES="app-api,cook-note"
+
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "auth-db-staging"
@@ -90,6 +96,12 @@ dead_letter_queue = "auth-queue-staging-dlq"
 # production
 
 [env.production]
+
+[env.production.vars]
+OAUTH_REDIRECT_URI="https://auth-server-production.cook-note.workers.dev/auth/google/callback"
+JWT_ISSUER="https://auth-server-production.cook-note.workers.dev"
+JWT_DEFAULT_AUDIENCE="app-api"
+ALLOWED_AUDIENCES="app-api,cook-note"
 
 [[env.production.d1_databases]]
 binding = "DB"

@@ -17,12 +17,12 @@ dir = "db"
 run="wrangler d1 migrations apply auth-db-staging --remote --env staging"
 
 [tasks.deploy-staging]
-run="MISE_ENV=staging wrangler deploy --minify --env staging"
+run="wrangler deploy --minify --env staging"
 
 [tasks.migrate-production]
 dir = "db"
 run="wrangler d1 migrations apply auth-db-production --remote --env production"
 
 [tasks.deploy-production]
-run="MISE_ENV=production wrangler deploy --minify --env production"
+run="wrangler deploy --minify --env production"
 
