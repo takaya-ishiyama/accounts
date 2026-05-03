@@ -1,3 +1,4 @@
+use crate::application::auth::session_verifier::SessionVerifierError;
 use crate::{
     application::{
         account::read_repository::AccountReadError,
@@ -50,6 +51,15 @@ impl From<AccountReadError> for AppError {
 impl From<SessionIssuerError> for AppError {
     fn from(e: SessionIssuerError) -> Self {
         internal(e.to_string())
+    }
+}
+
+impl From<SessionVerifierError> for AppError {
+    fn from(e: SessionVerifierError) -> Self {
+        match e {
+            SessionVerifierError::Invalid(msg) => unauthorized(msg),
+            SessionVerifierError::Internal(msg) => internal(msg),
+        }
     }
 }
 

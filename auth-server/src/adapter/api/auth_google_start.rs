@@ -7,14 +7,14 @@ use std::future::Future;
 use worker::send::SendFuture;
 
 use crate::{
-    application::{http::error::{bad_request, internal, AppError}, usecase::queries::begin_signin::begin_signin},
+    application::{
+        http::error::{bad_request, internal, AppError},
+        usecase::queries::begin_signin::begin_signin,
+    },
     domain::auth::audience::AudienceError,
     infrastructure::{
-        clock::WorkerClock,
-        env::Environment,
-        oidc_state_store::KvOidcStateStore,
-        providers::google::GoogleProvider,
-        random::GetRandomTokenGenerator,
+        clock::WorkerClock, env::Environment, oidc_state_store::KvOidcStateStore,
+        providers::google::GoogleProvider, random::GetRandomTokenGenerator,
     },
     AppState,
 };

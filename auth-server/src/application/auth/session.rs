@@ -1,6 +1,10 @@
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-use rsa::{pkcs1v15::{SigningKey, VerifyingKey, Signature}, pkcs8::DecodePrivateKey, RsaPrivateKey};
 use rsa::signature::{SignatureEncoding, Signer as _, Verifier as _};
+use rsa::{
+    pkcs1v15::{Signature, SigningKey, VerifyingKey},
+    pkcs8::DecodePrivateKey,
+    RsaPrivateKey,
+};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
@@ -24,8 +28,7 @@ pub fn issue_jwt(
     now_secs: i64,
     jti: String,
 ) -> Result<String, String> {
-    let private_key =
-        RsaPrivateKey::from_pkcs8_pem(private_key_pem).map_err(|e| e.to_string())?;
+    let private_key = RsaPrivateKey::from_pkcs8_pem(private_key_pem).map_err(|e| e.to_string())?;
     let signing_key = SigningKey::<Sha256>::new(private_key);
 
     let header = serde_json::json!({ "alg": "RS256", "typ": "JWT", "kid": kid });
@@ -64,8 +67,7 @@ pub fn verify_session(
     let payload_bytes = URL_SAFE_NO_PAD
         .decode(parts[1])
         .map_err(|e| e.to_string())?;
-    let claims: JwtClaims =
-        serde_json::from_slice(&payload_bytes).map_err(|e| e.to_string())?;
+    let claims: JwtClaims = serde_json::from_slice(&payload_bytes).map_err(|e| e.to_string())?;
 
     if claims.exp <= now_secs {
         return Err("token expired".to_string());
@@ -86,10 +88,7 @@ pub fn verify_session(
     for pem in key_pems.iter().filter(|p| !p.is_empty()) {
         if let Ok(private_key) = RsaPrivateKey::from_pkcs8_pem(pem) {
             let verifying_key = VerifyingKey::<Sha256>::new(private_key.to_public_key());
-            if verifying_key
-                .verify(signing_input.as_bytes(), &sig)
-                .is_ok()
-            {
+            if verifying_key.verify(signing_input.as_bytes(), &sig).is_ok() {
                 return Ok(claims);
             }
         }

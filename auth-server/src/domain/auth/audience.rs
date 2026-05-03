@@ -30,6 +30,10 @@ pub fn parse(raw: &str) -> Result<AllowedAudiences, AudienceError> {
 }
 
 impl AllowedAudiences {
+    pub fn as_slice(&self) -> &[String] {
+        &self.0
+    }
+
     pub fn select<'a>(
         &'a self,
         requested: Option<&'a str>,

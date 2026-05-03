@@ -26,8 +26,8 @@ impl Environment {
             .ok()
             .map(|v| v.to_string())
             .unwrap_or_else(|| default_audience.clone());
-        let allowed_audiences = audience::parse(&allowed_raw)
-            .map_err(|e| worker::Error::RustError(e.to_string()))?;
+        let allowed_audiences =
+            audience::parse(&allowed_raw).map_err(|e| worker::Error::RustError(e.to_string()))?;
 
         Ok(Self {
             google_client_id: var(env, "GOOGLE_CLIENT_ID")?,

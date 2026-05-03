@@ -17,8 +17,7 @@ impl fmt::Display for CommandBusError {
     }
 }
 
-pub type CommandBusFuture<'a, T> =
-    Pin<Box<dyn Future<Output = Result<T, CommandBusError>> + 'a>>;
+pub type CommandBusFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, CommandBusError>> + 'a>>;
 
 pub trait CommandBus {
     fn dispatch<'a>(

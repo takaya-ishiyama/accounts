@@ -10,4 +10,5 @@ pub mod oidc_state_store;
 pub mod providers;
 pub mod random;
 pub mod session_issuer;
+pub mod session_verifier;
 pub mod time;
