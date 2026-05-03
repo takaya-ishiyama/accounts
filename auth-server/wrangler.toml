@@ -6,6 +6,9 @@ compatibility_date = "2026-04-24"
 enabled = true
 head_sampling_rate = 1
 
+[placement]
+mode = "smart"
+
 [build]
 command = "cargo install -q \"worker-build@^0.8\" && worker-build --release --panic-unwind"
 
