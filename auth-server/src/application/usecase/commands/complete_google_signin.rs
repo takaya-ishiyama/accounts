@@ -69,7 +69,7 @@ pub async fn complete_google_signin(
     } else {
         &oidc_state.audience
     };
-    let issued = sessions.issue(&response.account_id, audience)?;
+    let issued = sessions.issue(&response.account_id, response.account_version, audience)?;
 
     Ok(CompletedGoogleSignin {
         return_to: return_to::sanitize(&oidc_state.return_to).into_owned(),

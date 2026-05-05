@@ -41,7 +41,12 @@ impl<'a> EnvSessionIssuer<'a> {
 }
 
 impl SessionIssuer for EnvSessionIssuer<'_> {
-    fn issue(&self, account_id: &str, audience: &str) -> Result<IssuedSession, SessionIssuerError> {
+    fn issue(
+        &self,
+        account_id: &str,
+        account_version: u64,
+        audience: &str,
+    ) -> Result<IssuedSession, SessionIssuerError> {
         let now_secs = self.clock.now_ms() / 1000;
         let jti = self.ids.new_id();
         let jwt = session::issue_jwt(
@@ -50,6 +55,7 @@ impl SessionIssuer for EnvSessionIssuer<'_> {
             account_id,
             &self.config.issuer,
             audience,
+            account_version,
             self.config.ttl_secs,
             now_secs,
             jti,

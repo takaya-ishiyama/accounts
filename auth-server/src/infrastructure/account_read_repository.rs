@@ -1,10 +1,15 @@
 use worker::{wasm_bindgen::JsValue, Env};
 
 use crate::application::account::read_repository::{
-    AccountReadError, AccountReadFuture, AccountReadRepository, AccountView, IdentityView,
+    AccountCurrentRepository, AccountReadError, AccountReadFuture, AccountReadRepository,
+    AccountView, IdentityView,
 };
 
 pub struct D1AccountReadRepository<'a> {
+    pub env: &'a Env,
+}
+
+pub struct DoAccountCurrentRepository<'a> {
     pub env: &'a Env,
 }
 
@@ -41,6 +46,7 @@ impl AccountReadRepository for D1AccountReadRepository<'_> {
                 id: String,
                 status: String,
                 primary_email: String,
+                version: i64,
             }
 
             #[derive(serde::Deserialize)]
@@ -53,7 +59,7 @@ impl AccountReadRepository for D1AccountReadRepository<'_> {
 
             let db = self.env.d1("DB").map_err(to_backend_error)?;
             let account = db
-                .prepare("SELECT id, status, primary_email FROM accounts WHERE id = ?1")
+                .prepare("SELECT id, status, primary_email, version FROM accounts WHERE id = ?1")
                 .bind(&[JsValue::from_str(account_id)])
                 .map_err(to_backend_error)?
                 .first::<AccountRow>(None)
@@ -88,8 +94,57 @@ impl AccountReadRepository for D1AccountReadRepository<'_> {
                 id: account.id,
                 status: account.status,
                 primary_email: account.primary_email,
+                version: account.version.max(0) as u64,
                 identities,
             }))
+        })
+    }
+}
+
+impl AccountCurrentRepository for DoAccountCurrentRepository<'_> {
+    fn get_current_account<'a>(
+        &'a self,
+        account_id: &'a str,
+    ) -> AccountReadFuture<'a, Option<AccountView>> {
+        Box::pin(async move {
+            let namespace = self
+                .env
+                .durable_object("AUTH_DO")
+                .map_err(to_backend_error)?;
+            let stub = namespace
+                .id_from_name(account_id)
+                .map_err(to_backend_error)?
+                .get_stub()
+                .map_err(to_backend_error)?;
+
+            let mut req_init = worker::RequestInit::new();
+            req_init.with_method(worker::Method::Get);
+
+            let req = worker::Request::new_with_init(
+                &format!("https://do/accounts/{account_id}/current"),
+                &req_init,
+            )
+            .map_err(to_backend_error)?;
+            let mut resp = stub
+                .fetch_with_request(req)
+                .await
+                .map_err(to_backend_error)?;
+
+            if resp.status_code() == 404 {
+                return Ok(None);
+            }
+            if !(200..300).contains(&resp.status_code()) {
+                let text = resp.text().await.unwrap_or_default();
+                return Err(AccountReadError::Backend(format!(
+                    "DO current account failed {}: {text}",
+                    resp.status_code()
+                )));
+            }
+
+            resp.json::<AccountView>()
+                .await
+                .map(Some)
+                .map_err(to_backend_error)
         })
     }
 }

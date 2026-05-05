@@ -3,6 +3,7 @@ use std::fmt;
 #[derive(Debug, Clone)]
 pub struct VerifiedSession {
     pub account_id: String,
+    pub account_version: u64,
 }
 
 #[derive(Debug)]

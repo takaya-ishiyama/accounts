@@ -6,3 +6,9 @@ pub struct AccountDetail {
     pub(crate) name: Option<String>,
     pub(crate) primary_email: String,
 }
+
+impl AccountDetail {
+    pub fn primary_email(&self) -> &str {
+        &self.primary_email
+    }
+}
