@@ -38,6 +38,8 @@ pub enum CommandDto {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CommandResponse {
     pub account_id: String,
+    #[serde(default)]
+    pub account_version: u64,
     pub events_emitted: usize,
 }
 

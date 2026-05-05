@@ -2,6 +2,7 @@ use serde::Deserialize;
 use std::time::Duration;
 use worker::*;
 
+use crate::application::account::read_repository::{AccountView, IdentityView};
 use crate::application::usecase::commands::dto::{CommandDto, CommandResponse};
 use crate::domain::account::account::Account;
 use crate::domain::events::EventEnvelope;
@@ -27,8 +28,16 @@ impl DurableObject for AuthDurableObject {
     }
 
     async fn fetch(&self, mut req: Request) -> Result<Response> {
-        match (req.method(), req.path().as_str()) {
+        let path = req.path();
+        match (req.method(), path.as_str()) {
             (Method::Post, "/command") => self.handle_command(&mut req).await,
+            (Method::Get, path) => {
+                if let Some(account_id) = account_id_from_current_path(path) {
+                    self.handle_current_account(account_id).await
+                } else {
+                    Response::error("Not Found", 404)
+                }
+            }
             _ => Response::error("Not Found", 404),
         }
     }
@@ -51,8 +60,11 @@ impl AuthDurableObject {
 
         // Return cached result for duplicate requests
         if let Some(cached_json) = storage.get::<String>(&cache_key).await? {
-            let cached: CommandResponse =
+            let mut cached: CommandResponse =
                 serde_json::from_str(&cached_json).map_err(|e| Error::RustError(e.to_string()))?;
+            if cached.account_version == 0 {
+                cached.account_version = storage.get::<u64>("meta:version").await?.unwrap_or(0);
+            }
             return Response::from_json(&cached);
         }
 
@@ -120,6 +132,7 @@ impl AuthDurableObject {
         // Cache idempotency result
         let resp = CommandResponse {
             account_id: account_id.clone(),
+            account_version: new_version,
             events_emitted: new_envelopes.len(),
         };
         let resp_json =
@@ -132,6 +145,37 @@ impl AuthDurableObject {
         }
 
         Response::from_json(&resp)
+    }
+
+    async fn handle_current_account(&self, account_id: &str) -> Result<Response> {
+        let account = self.replay_account().await?;
+
+        if account.version() == 0 || account.id() != account_id {
+            return Response::error("Not Found", 404);
+        }
+
+        let Some(detail) = account.account_detail() else {
+            return Response::error("Not Found", 404);
+        };
+
+        let identities = account
+            .identities()
+            .iter()
+            .map(|identity| IdentityView {
+                provider: identity.provider().as_str().to_string(),
+                subject: identity.subject().to_string(),
+                email: identity.email().to_string(),
+                email_verified: identity.email_verified(),
+            })
+            .collect();
+
+        Response::from_json(&AccountView {
+            id: account.id().to_string(),
+            status: format!("{:?}", account.status()),
+            primary_email: detail.primary_email().to_string(),
+            version: account.version(),
+            identities,
+        })
     }
 
     /// Best-effort Queue send + outbox flag removal.
@@ -173,6 +217,21 @@ impl AuthDurableObject {
             self.flush_to_queue(&pending).await?;
         }
         Ok(())
+    }
+
+    async fn replay_account(&self) -> Result<Account> {
+        let storage = self.state.storage();
+        let version: u64 = storage.get::<u64>("meta:version").await?.unwrap_or(0);
+        let mut account = Account::empty();
+        for seq in 1..=version {
+            let key = format!("event:{seq:020}");
+            if let Some(ev_json) = storage.get::<String>(&key).await? {
+                let ev: EventEnvelope =
+                    serde_json::from_str(&ev_json).map_err(|e| Error::RustError(e.to_string()))?;
+                account = account.apply(&ev);
+            }
+        }
+        Ok(account)
     }
 }
 
@@ -219,4 +278,8 @@ fn dto_to_command(dto: &CommandDto) -> Command {
             occurred_at: *occurred_at,
         },
     }
+}
+
+fn account_id_from_current_path(path: &str) -> Option<&str> {
+    path.strip_prefix("/accounts/")?.strip_suffix("/current")
 }

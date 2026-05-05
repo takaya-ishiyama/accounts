@@ -60,6 +60,7 @@ impl SessionVerifier for EnvSessionVerifier<'_> {
                 Ok(claims) => {
                     return Ok(VerifiedSession {
                         account_id: claims.sub,
+                        account_version: claims.account_version,
                     });
                 }
                 Err(error) => last_error = Some(error),

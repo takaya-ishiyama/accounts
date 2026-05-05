@@ -16,6 +16,8 @@ pub struct JwtClaims {
     pub jti: String,
     pub iat: i64,
     pub exp: i64,
+    #[serde(default)]
+    pub account_version: u64,
 }
 
 pub fn issue_jwt(
@@ -24,6 +26,7 @@ pub fn issue_jwt(
     sub: &str,
     issuer: &str,
     audience: &str,
+    account_version: u64,
     ttl_secs: u64,
     now_secs: i64,
     jti: String,
@@ -39,6 +42,7 @@ pub fn issue_jwt(
         "jti": jti,
         "iat": now_secs,
         "exp": now_secs + ttl_secs as i64,
+        "account_version": account_version,
     });
 
     let header_b64 = URL_SAFE_NO_PAD.encode(header.to_string());

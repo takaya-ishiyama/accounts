@@ -1,6 +1,6 @@
 use std::{fmt, future::Future, pin::Pin};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
 pub enum AccountReadError {
@@ -17,15 +17,16 @@ impl fmt::Display for AccountReadError {
 
 pub type AccountReadFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, AccountReadError>> + 'a>>;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccountView {
     pub id: String,
     pub status: String,
     pub primary_email: String,
+    pub version: u64,
     pub identities: Vec<IdentityView>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IdentityView {
     pub provider: String,
     pub subject: String,
@@ -42,4 +43,11 @@ pub trait AccountReadRepository {
 
     fn get_account<'a>(&'a self, account_id: &'a str)
         -> AccountReadFuture<'a, Option<AccountView>>;
+}
+
+pub trait AccountCurrentRepository {
+    fn get_current_account<'a>(
+        &'a self,
+        account_id: &'a str,
+    ) -> AccountReadFuture<'a, Option<AccountView>>;
 }

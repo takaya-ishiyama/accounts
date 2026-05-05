@@ -13,7 +13,8 @@ use crate::{
         usecase::queries::current_account::current_account,
     },
     infrastructure::{
-        account_read_repository::D1AccountReadRepository, clock::WorkerClock,
+        account_read_repository::{D1AccountReadRepository, DoAccountCurrentRepository},
+        clock::WorkerClock,
         session_verifier::EnvSessionVerifier,
     },
     AppState,
@@ -29,7 +30,8 @@ pub fn router(
         let clock = WorkerClock;
         let sessions = EnvSessionVerifier::load(&state.env, &clock)?;
         let accounts = D1AccountReadRepository { env: &state.env };
-        let account = current_account(&sessions, &accounts, token).await?;
+        let current_accounts = DoAccountCurrentRepository { env: &state.env };
+        let account = current_account(&sessions, &accounts, &current_accounts, token).await?;
         let body = serde_json::to_string(&account).map_err(|e| {
             crate::application::http::error::internal(format!("serialize account response: {e}"))
         })?;

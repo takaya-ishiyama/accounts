@@ -19,5 +19,10 @@ impl fmt::Display for SessionIssuerError {
 }
 
 pub trait SessionIssuer {
-    fn issue(&self, account_id: &str, audience: &str) -> Result<IssuedSession, SessionIssuerError>;
+    fn issue(
+        &self,
+        account_id: &str,
+        account_version: u64,
+        audience: &str,
+    ) -> Result<IssuedSession, SessionIssuerError>;
 }
