@@ -237,6 +237,29 @@ refresh token は JWT ではなく opaque token として扱う。
 
 初期実装では refresh token の有効期限切れによる自然失効のみを扱う。
 
+### revoke を実装しないことによるリスク
+
+今回の範囲では refresh token revoke API、device 一覧、session 一覧を実装しない。そのため、ユーザー単位・端末単位・refresh token 単位の即時失効はできない。
+
+具体的な影響は以下。
+
+- アプリ側で logout しても、auth-server 側に保存された refresh token を明示的に無効化できない
+- refresh token が漏洩した場合、有効期限まで新しい access token を発行される可能性がある
+- ユーザー退会、アカウント停止、権限剥奪、identity unlink などで「今すぐ全 token を止める」操作ができない
+- access token は JWT であり、各アプリケーション API はオフライン検証するため、発行済み access token は `exp` まで有効になりうる
+
+初期実装ではこのリスクを以下で限定する。
+
+- access token を短命にする
+- refresh token に最大 TTL を設定する
+- refresh token は hash 化して保存する
+- refresh token は `client_id` と `account_id` に bind する
+- refresh token grant 成功時に必ず refresh token をローテーションする
+- refresh token grant 時に account の現在状態を確認し、停止済み account では発行しない
+- refresh token 保存データに `account_version` を持たせ、将来の強制失効・世代管理へ拡張しやすくする
+
+この判断により、MVP では token の即時 revoke ではなく、短命 access token、refresh token rotation、refresh token TTL、refresh 時の account 状態確認によって被害範囲を制限する。
+
 ## `__Host-session` Cookie の位置づけ
 
 既存の callback で発行している `__Host-session` Cookie は削除しない。
