@@ -8,8 +8,6 @@ use crate::{
     infrastructure::kv as kv_helper,
 };
 
-const TTL_SECS: u64 = 300;
-
 pub struct KvAppAuthorizationCodeStore<'a> {
     kv: &'a KvStore,
 }
@@ -25,9 +23,10 @@ impl AppAuthorizationCodeStore for KvAppAuthorizationCodeStore<'_> {
         &'a self,
         code: &'a str,
         value: &'a AppAuthorizationCodeValue,
+        ttl_secs: u64,
     ) -> AppAuthorizationCodeStoreFuture<'a, ()> {
         Box::pin(async move {
-            kv_helper::put_json(self.kv, &code_kv_key(code), value, TTL_SECS)
+            kv_helper::put_json(self.kv, &code_kv_key(code), value, ttl_secs)
                 .await
                 .map_err(to_store_error)
         })

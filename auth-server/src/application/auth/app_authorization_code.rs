@@ -32,6 +32,7 @@ pub trait AppAuthorizationCodeStore {
         &'a self,
         code: &'a str,
         value: &'a AppAuthorizationCodeValue,
+        ttl_secs: u64,
     ) -> AppAuthorizationCodeStoreFuture<'a, ()>;
 
     fn load_and_delete<'a>(

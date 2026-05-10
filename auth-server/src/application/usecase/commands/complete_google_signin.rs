@@ -1,14 +1,20 @@
 use crate::{
     application::{
         account::read_repository::AccountReadRepository,
-        auth::{oidc_state::OidcStateStore, session_issuer::SessionIssuer},
+        auth::{
+            app_authorization_code::{AppAuthorizationCodeStore, AppAuthorizationCodeValue},
+            oidc_state::OidcStateStore,
+            session_issuer::SessionIssuer,
+        },
         http::error::{bad_request, AppError},
         usecase::commands::{bus::CommandBus, dto::CommandDto},
     },
     domain::{
         auth::{
+            client::AppClients,
             provider::{CallbackCtx, IdentityProvider},
             return_to,
+            token::TokenGenerator,
         },
         clock::Clock,
         id_generator::IdGenerator,
@@ -16,23 +22,27 @@ use crate::{
 };
 
 pub struct CompletedGoogleSignin {
-    pub return_to: String,
+    pub redirect_uri: String,
     pub jwt: String,
     pub ttl_secs: u64,
-    pub account_id: String,
-    pub account_version: u64,
-    pub client_id: String,
-    pub token_audience: String,
+}
+
+pub struct CompleteGoogleSigninConfig {
+    pub app_code_ttl_secs: u64,
 }
 
 pub async fn complete_google_signin(
     provider: &dyn IdentityProvider,
     oidc_state_store: &dyn OidcStateStore,
+    app_codes: &dyn AppAuthorizationCodeStore,
     accounts: &dyn AccountReadRepository,
     commands: &dyn CommandBus,
     sessions: &dyn SessionIssuer,
     clock: &dyn Clock,
     ids: &dyn IdGenerator,
+    tokens: &dyn TokenGenerator,
+    app_clients: &AppClients,
+    config: &CompleteGoogleSigninConfig,
     code: &str,
     state_key: &str,
     default_audience: &str,
@@ -79,14 +89,51 @@ pub async fn complete_google_signin(
     let return_to = return_to::sanitize(&oidc_state.return_to).into_owned();
     let token_audience = audience.to_string();
     let client_id = oidc_state.client_id;
+    let client = app_clients
+        .get(&client_id)
+        .map_err(|_| bad_request("invalid_client"))?;
+
+    let app_code = tokens.generate(32);
+    let now_secs = clock.now_ms() / 1000;
+    app_codes
+        .save(
+            &app_code,
+            &AppAuthorizationCodeValue {
+                account_id: response.account_id,
+                account_version: response.account_version,
+                client_id,
+                token_audience,
+                return_to: return_to.clone(),
+                expires_at: now_secs + config.app_code_ttl_secs as i64,
+            },
+            config.app_code_ttl_secs,
+        )
+        .await?;
 
     Ok(CompletedGoogleSignin {
-        return_to,
+        redirect_uri: redirect_uri_with_code(&client.redirect_uri, &app_code, &return_to),
         jwt: issued.jwt,
         ttl_secs: issued.ttl_secs,
-        account_id: response.account_id,
-        account_version: response.account_version,
-        client_id,
-        token_audience,
     })
+}
+
+fn redirect_uri_with_code(redirect_uri: &str, code: &str, return_to: &str) -> String {
+    let separator = if redirect_uri.contains('?') { '&' } else { '?' };
+    format!(
+        "{redirect_uri}{separator}code={code}&return_to={}",
+        percent_encode(return_to)
+    )
+}
+
+fn percent_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
 }

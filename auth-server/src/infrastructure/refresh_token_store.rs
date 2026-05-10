@@ -22,12 +22,13 @@ impl<'a> KvRefreshTokenStore<'a> {
 impl RefreshTokenStore for KvRefreshTokenStore<'_> {
     fn save<'a>(
         &'a self,
-        token_hash: &'a str,
+        token: &'a str,
         value: &'a RefreshTokenValue,
         ttl_secs: u64,
     ) -> RefreshTokenStoreFuture<'a, ()> {
         Box::pin(async move {
-            kv_helper::put_json(self.kv, &refresh_kv_key(token_hash), value, ttl_secs)
+            let token_hash = hash_refresh_token(token);
+            kv_helper::put_json(self.kv, &refresh_kv_key(&token_hash), value, ttl_secs)
                 .await
                 .map_err(to_store_error)
         })
@@ -35,25 +36,27 @@ impl RefreshTokenStore for KvRefreshTokenStore<'_> {
 
     fn load<'a>(
         &'a self,
-        token_hash: &'a str,
+        token: &'a str,
     ) -> RefreshTokenStoreFuture<'a, Option<RefreshTokenValue>> {
         Box::pin(async move {
-            kv_helper::get_json::<RefreshTokenValue>(self.kv, &refresh_kv_key(token_hash))
+            let token_hash = hash_refresh_token(token);
+            kv_helper::get_json::<RefreshTokenValue>(self.kv, &refresh_kv_key(&token_hash))
                 .await
                 .map_err(to_store_error)
         })
     }
 
-    fn delete<'a>(&'a self, token_hash: &'a str) -> RefreshTokenStoreFuture<'a, ()> {
+    fn delete<'a>(&'a self, token: &'a str) -> RefreshTokenStoreFuture<'a, ()> {
         Box::pin(async move {
-            kv_helper::delete(self.kv, &refresh_kv_key(token_hash))
+            let token_hash = hash_refresh_token(token);
+            kv_helper::delete(self.kv, &refresh_kv_key(&token_hash))
                 .await
                 .map_err(to_store_error)
         })
     }
 }
 
-pub fn hash_refresh_token(token: &str) -> String {
+fn hash_refresh_token(token: &str) -> String {
     URL_SAFE_NO_PAD.encode(Sha256::digest(token.as_bytes()))
 }
 

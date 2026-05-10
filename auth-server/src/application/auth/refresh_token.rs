@@ -3,14 +3,12 @@ use std::{fmt, future::Future, pin::Pin};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RefreshTokenValue {
-    pub token_hash: String,
     pub account_id: String,
     pub account_version: u64,
     pub client_id: String,
     pub token_audience: String,
     pub expires_at: i64,
     pub created_at: i64,
-    pub rotated_at: Option<i64>,
 }
 
 #[derive(Debug)]
@@ -32,15 +30,13 @@ pub type RefreshTokenStoreFuture<'a, T> =
 pub trait RefreshTokenStore {
     fn save<'a>(
         &'a self,
-        token_hash: &'a str,
+        token: &'a str,
         value: &'a RefreshTokenValue,
         ttl_secs: u64,
     ) -> RefreshTokenStoreFuture<'a, ()>;
 
-    fn load<'a>(
-        &'a self,
-        token_hash: &'a str,
-    ) -> RefreshTokenStoreFuture<'a, Option<RefreshTokenValue>>;
+    fn load<'a>(&'a self, token: &'a str)
+        -> RefreshTokenStoreFuture<'a, Option<RefreshTokenValue>>;
 
-    fn delete<'a>(&'a self, token_hash: &'a str) -> RefreshTokenStoreFuture<'a, ()>;
+    fn delete<'a>(&'a self, token: &'a str) -> RefreshTokenStoreFuture<'a, ()>;
 }

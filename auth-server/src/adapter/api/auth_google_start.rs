@@ -7,10 +7,7 @@ use std::future::Future;
 use worker::send::SendFuture;
 
 use crate::{
-    application::{
-        http::error::{bad_request, AppError},
-        usecase::queries::begin_signin::begin_signin,
-    },
+    application::{http::error::AppError, usecase::queries::begin_signin::begin_signin},
     infrastructure::{
         clock::WorkerClock, env::Environment, oidc_state_store::KvOidcStateStore,
         providers::google::GoogleProvider, random::GetRandomTokenGenerator,
@@ -36,11 +33,6 @@ pub fn router(
         let clock = WorkerClock;
         let tokens = GetRandomTokenGenerator;
 
-        let client = environment
-            .app_clients
-            .get(&query.client_id)
-            .map_err(|_| bad_request("invalid_client"))?;
-
         let provider = GoogleProvider {
             env: &environment,
             kv: &kv,
@@ -48,7 +40,14 @@ pub fn router(
             clock: &clock,
         };
         let oidc_state_store = KvOidcStateStore::new(&kv);
-        let redirect = begin_signin(&provider, &oidc_state_store, return_to, client).await?;
+        let redirect = begin_signin(
+            &provider,
+            &oidc_state_store,
+            return_to,
+            &query.client_id,
+            &environment.app_clients,
+        )
+        .await?;
         Ok(Redirect::to(&redirect.url))
     })
 }
