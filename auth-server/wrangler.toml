@@ -57,6 +57,8 @@ OAUTH_REDIRECT_URI="https://auth-server-staging.cook-note.workers.dev/auth/googl
 JWT_ISSUER="https://auth-server-staging.cook-note.workers.dev"
 JWT_DEFAULT_AUDIENCE="app-api"
 ALLOWED_AUDIENCES="app-api,cook-note"
+APP_CLIENTS='[{"client_id":"cook-note-web","token_audience":"cook-note","redirect_uri":"https://cook-note.example.com/auth/callback"}]'
+REFRESH_TOKEN_TTL_SECS="2592000"
 
 [[env.staging.d1_databases]]
 binding = "DB"
@@ -102,6 +104,8 @@ OAUTH_REDIRECT_URI="https://auth-server-production.cook-note.workers.dev/auth/go
 JWT_ISSUER="https://auth-server-production.cook-note.workers.dev"
 JWT_DEFAULT_AUDIENCE="app-api"
 ALLOWED_AUDIENCES="app-api,cook-note"
+APP_CLIENTS='[{"client_id":"cook-note-web","token_audience":"cook-note","redirect_uri":"https://cook-note.example.com/auth/callback"}]'
+REFRESH_TOKEN_TTL_SECS="2592000"
 
 [[env.production.d1_databases]]
 binding = "DB"

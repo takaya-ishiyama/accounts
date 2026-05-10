@@ -19,6 +19,10 @@ pub struct CompletedGoogleSignin {
     pub return_to: String,
     pub jwt: String,
     pub ttl_secs: u64,
+    pub account_id: String,
+    pub account_version: u64,
+    pub client_id: String,
+    pub token_audience: String,
 }
 
 pub async fn complete_google_signin(
@@ -64,16 +68,25 @@ pub async fn complete_google_signin(
     };
     let response = commands.dispatch(&account_id, &cmd).await?;
 
-    let audience = if oidc_state.audience.is_empty() {
+    let audience = if !oidc_state.token_audience.is_empty() {
+        oidc_state.token_audience.as_str()
+    } else if oidc_state.audience.is_empty() {
         default_audience
     } else {
         &oidc_state.audience
     };
     let issued = sessions.issue(&response.account_id, response.account_version, audience)?;
+    let return_to = return_to::sanitize(&oidc_state.return_to).into_owned();
+    let token_audience = audience.to_string();
+    let client_id = oidc_state.client_id;
 
     Ok(CompletedGoogleSignin {
-        return_to: return_to::sanitize(&oidc_state.return_to).into_owned(),
+        return_to,
         jwt: issued.jwt,
         ttl_secs: issued.ttl_secs,
+        account_id: response.account_id,
+        account_version: response.account_version,
+        client_id,
+        token_audience,
     })
 }

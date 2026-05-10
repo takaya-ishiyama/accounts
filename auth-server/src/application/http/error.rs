@@ -1,8 +1,11 @@
-use crate::application::auth::session_verifier::SessionVerifierError;
 use crate::{
     application::{
         account::read_repository::AccountReadError,
-        auth::{oidc_state::OidcStateStoreError, session_issuer::SessionIssuerError},
+        auth::{
+            app_authorization_code::AppAuthorizationCodeStoreError,
+            oidc_state::OidcStateStoreError, refresh_token::RefreshTokenStoreError,
+            session_issuer::SessionIssuerError, session_verifier::SessionVerifierError,
+        },
         usecase::commands::bus::CommandBusError,
     },
     domain::auth::provider::ProviderError,
@@ -50,6 +53,18 @@ impl From<AccountReadError> for AppError {
 
 impl From<SessionIssuerError> for AppError {
     fn from(e: SessionIssuerError) -> Self {
+        internal(e.to_string())
+    }
+}
+
+impl From<AppAuthorizationCodeStoreError> for AppError {
+    fn from(e: AppAuthorizationCodeStoreError) -> Self {
+        internal(e.to_string())
+    }
+}
+
+impl From<RefreshTokenStoreError> for AppError {
+    fn from(e: RefreshTokenStoreError) -> Self {
         internal(e.to_string())
     }
 }

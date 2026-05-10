@@ -33,6 +33,7 @@ fn router(env: Env) -> Router {
             get(adapter::api::auth_google_callback::router),
         )
         .route("/auth/logout", post(adapter::api::auth_logout::router))
+        .route("/oauth/token", post(adapter::api::oauth_token::router))
         .route(
             "/me/identities/google/unlink",
             post(adapter::api::unlink_google_identity::router),

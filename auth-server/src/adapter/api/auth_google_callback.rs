@@ -9,11 +9,14 @@ use worker::send::SendFuture;
 
 use crate::{
     application::{
+        auth::app_authorization_code::{AppAuthorizationCodeStore, AppAuthorizationCodeValue},
         http::error::{bad_request, internal, AppError},
         usecase::commands::complete_google_signin::complete_google_signin,
     },
+    domain::{auth::token::TokenGenerator, clock::Clock},
     infrastructure::{
-        account_read_repository::D1AccountReadRepository, clock::WorkerClock,
+        account_read_repository::D1AccountReadRepository,
+        app_authorization_code_store::KvAppAuthorizationCodeStore, clock::WorkerClock,
         command_bus::DoCommandBus, env::Environment, id_generator::UuidV7Generator,
         oidc_state_store::KvOidcStateStore, providers::google::GoogleProvider,
         random::GetRandomTokenGenerator, session_issuer::EnvSessionIssuer,
@@ -63,6 +66,7 @@ pub fn router(
         let accounts = D1AccountReadRepository { env };
         let commands = DoCommandBus { env };
         let sessions = EnvSessionIssuer::load(env, &clock, &ids)?;
+        let app_codes = KvAppAuthorizationCodeStore::new(&kv);
 
         let completed = complete_google_signin(
             &provider,
@@ -78,12 +82,55 @@ pub fn router(
         )
         .await?;
 
+        let client = environment
+            .app_clients
+            .get(&completed.client_id)
+            .map_err(|_| bad_request("invalid_client"))?;
+        let app_code = tokens.generate(32);
+        let now_secs = clock.now_ms() / 1000;
+        let app_return_to = completed.return_to.clone();
+        app_codes
+            .save(
+                &app_code,
+                &AppAuthorizationCodeValue {
+                    account_id: completed.account_id,
+                    account_version: completed.account_version,
+                    client_id: completed.client_id,
+                    token_audience: completed.token_audience,
+                    return_to: completed.return_to,
+                    expires_at: now_secs + 300,
+                },
+            )
+            .await?;
+
+        let redirect_uri = redirect_uri_with_code(&client.redirect_uri, &app_code, &app_return_to);
         Ok(redirect_with_session(
-            &completed.return_to,
+            &redirect_uri,
             &completed.jwt,
             completed.ttl_secs,
         )?)
     })
+}
+
+fn redirect_uri_with_code(redirect_uri: &str, code: &str, return_to: &str) -> String {
+    let separator = if redirect_uri.contains('?') { '&' } else { '?' };
+    format!(
+        "{redirect_uri}{separator}code={code}&return_to={}",
+        percent_encode(return_to)
+    )
+}
+
+fn percent_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
 }
 
 fn redirect_with_session(location: &str, jwt: &str, ttl_secs: u64) -> Result<Response, AppError> {

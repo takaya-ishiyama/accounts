@@ -4,6 +4,7 @@ use crate::{
         http::error::AppError,
     },
     domain::auth::{
+        client::AppClient,
         provider::{IdentityProvider, StartCtx},
         return_to,
     },
@@ -17,7 +18,7 @@ pub async fn begin_signin(
     provider: &dyn IdentityProvider,
     oidc_state_store: &dyn OidcStateStore,
     return_to_raw: &str,
-    audience: &str,
+    client: &AppClient,
 ) -> Result<SignInRedirect, AppError> {
     let sanitized = return_to::sanitize(return_to_raw).into_owned();
 
@@ -32,7 +33,9 @@ pub async fn begin_signin(
                 code_verifier: resp.code_verifier,
                 nonce: resp.nonce,
                 return_to: sanitized,
-                audience: audience.to_string(),
+                audience: client.token_audience.clone(),
+                client_id: client.client_id.clone(),
+                token_audience: client.token_audience.clone(),
             },
         )
         .await?;
