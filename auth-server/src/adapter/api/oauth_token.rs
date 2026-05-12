@@ -1,4 +1,8 @@
-use axum::{extract::State, Json};
+use axum::{
+    extract::State,
+    http::{header, HeaderMap, HeaderValue},
+    Json,
+};
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 use worker::send::SendFuture;
@@ -45,7 +49,7 @@ pub struct TokenResponse {
 pub fn router(
     State(state): State<AppState>,
     Json(req): Json<TokenRequest>,
-) -> SendFuture<impl Future<Output = Result<Json<TokenResponse>, AppError>>> {
+) -> SendFuture<impl Future<Output = Result<(HeaderMap, Json<TokenResponse>), AppError>>> {
     SendFuture::new(async move {
         let env = &state.env;
         let environment = Environment::load(env)?;
@@ -78,8 +82,15 @@ pub fn router(
         )
         .await?;
 
-        Ok(Json(response.into()))
+        Ok((token_response_headers(), Json(response.into())))
     })
+}
+
+fn token_response_headers() -> HeaderMap {
+    let mut headers = HeaderMap::new();
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    headers.insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
+    headers
 }
 
 fn parse_grant(req: &TokenRequest) -> Result<TokenGrant<'_>, AppError> {

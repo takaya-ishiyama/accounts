@@ -19,6 +19,7 @@ pub async fn begin_signin(
     oidc_state_store: &dyn OidcStateStore,
     return_to_raw: &str,
     client_id: &str,
+    app_state: Option<&str>,
     app_clients: &AppClients,
 ) -> Result<SignInRedirect, AppError> {
     let client = app_clients
@@ -40,6 +41,7 @@ pub async fn begin_signin(
                 audience: client.token_audience.clone(),
                 client_id: client.client_id.clone(),
                 token_audience: client.token_audience.clone(),
+                app_state: app_state.unwrap_or_default().to_string(),
             },
         )
         .await?;

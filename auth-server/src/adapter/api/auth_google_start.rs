@@ -19,6 +19,7 @@ use crate::{
 pub struct StartQuery {
     return_to: Option<String>,
     client_id: String,
+    state: Option<String>,
 }
 
 pub fn router(
@@ -45,6 +46,7 @@ pub fn router(
             &oidc_state_store,
             return_to,
             &query.client_id,
+            query.state.as_deref(),
             &environment.app_clients,
         )
         .await?;

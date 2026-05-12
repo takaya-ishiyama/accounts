@@ -111,18 +111,33 @@ pub async fn complete_google_signin(
         .await?;
 
     Ok(CompletedGoogleSignin {
-        redirect_uri: redirect_uri_with_code(&client.redirect_uri, &app_code, &return_to),
+        redirect_uri: redirect_uri_with_code(
+            &client.redirect_uri,
+            &app_code,
+            &return_to,
+            &oidc_state.app_state,
+        ),
         jwt: issued.jwt,
         ttl_secs: issued.ttl_secs,
     })
 }
 
-fn redirect_uri_with_code(redirect_uri: &str, code: &str, return_to: &str) -> String {
+fn redirect_uri_with_code(
+    redirect_uri: &str,
+    code: &str,
+    return_to: &str,
+    app_state: &str,
+) -> String {
     let separator = if redirect_uri.contains('?') { '&' } else { '?' };
-    format!(
+    let mut uri = format!(
         "{redirect_uri}{separator}code={code}&return_to={}",
         percent_encode(return_to)
-    )
+    );
+    if !app_state.is_empty() {
+        uri.push_str("&state=");
+        uri.push_str(&percent_encode(app_state));
+    }
+    uri
 }
 
 fn percent_encode(s: &str) -> String {

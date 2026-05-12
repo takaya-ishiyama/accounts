@@ -12,6 +12,8 @@ pub struct OidcStateValue {
     pub client_id: String,
     #[serde(default)]
     pub token_audience: String,
+    #[serde(default)]
+    pub app_state: String,
 }
 
 pub type OidcStateStoreResult<T> = Result<T, OidcStateStoreError>;

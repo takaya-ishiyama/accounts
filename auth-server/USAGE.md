@@ -56,10 +56,12 @@ APP_CLIENTS='[
 アプリ backend はブラウザを auth-server に redirect します。
 
 ```http
-GET https://auth.example.com/auth/google/start?client_id=cook-note-web&return_to=%2Fdashboard
+GET https://auth.example.com/auth/google/start?client_id=cook-note-web&return_to=%2Fdashboard&state=<app_state>
 ```
 
 `return_to` は相対パスだけを渡してください。
+
+`state` はアプリ backend がログイン開始ごとに生成するランダム値です。アプリ backend はこの値を自アプリ側の一時 session などに保存し、callback で戻ってきた `state` と一致することを確認してください。
 
 有効な例:
 
@@ -82,10 +84,11 @@ https://evil.example.com
 auth-server は `client_id` に登録された `redirect_uri` にだけ redirect します。
 
 ```http
-GET https://cook-note.example.com/auth/callback?code=...&return_to=%2Fdashboard
+GET https://cook-note.example.com/auth/callback?code=...&return_to=%2Fdashboard&state=<app_state>
 ```
 
 この `code` は Google OAuth code ではなく、auth-server が発行した app authorization code です。
+アプリ backend は `state` がログイン開始時に保存した値と一致することを確認してから、`code` を token に交換してください。
 
 ### 3. アプリ backend が code を token に交換
 
@@ -103,6 +106,11 @@ Content-Type: application/json
 ```
 
 成功レスポンス:
+
+```http
+Cache-Control: no-store
+Pragma: no-cache
+```
 
 ```json
 {
@@ -173,6 +181,11 @@ Content-Type: application/json
 ```
 
 成功すると、新しい access token と refresh token が返ります。
+
+```http
+Cache-Control: no-store
+Pragma: no-cache
+```
 
 ```json
 {
@@ -250,12 +263,14 @@ MISE_ENV=production mise run migrate-production
 ## 典型的なアプリ backend 実装
 
 1. `/login` で auth-server の `/auth/google/start` に redirect
-2. `/auth/callback` で `code` と `return_to` を受け取る
-3. backend から `/oauth/token` に authorization code exchange を送る
-4. 返ってきた token を backend 側 session に保存する
-5. app session cookie を発行する
-6. `return_to` に redirect する
-7. access token 期限切れ時は refresh token grant で更新する
+2. ログイン開始時にアプリ側 `state` を生成・保存し、`/auth/google/start` に渡す
+3. `/auth/callback` で `code`, `return_to`, `state` を受け取る
+4. callback の `state` が保存済みの値と一致することを確認する
+5. backend から `/oauth/token` に authorization code exchange を送る
+6. 返ってきた token を backend 側 session に保存する
+7. app session cookie を発行する
+8. `return_to` に redirect する
+9. access token 期限切れ時は refresh token grant で更新する
 
 ## 制限事項
 
