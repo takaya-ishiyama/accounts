@@ -78,12 +78,11 @@ pub async fn exchange_oauth_token(
         }
         TokenGrant::RefreshToken { refresh_token } => {
             let old_value = refresh_tokens
-                .load(refresh_token)
+                .load_and_delete(refresh_token)
                 .await?
                 .ok_or_else(|| bad_request("invalid_grant"))?;
 
             if old_value.client_id != request.client_id || old_value.expires_at <= now_secs(clock) {
-                refresh_tokens.delete(refresh_token).await?;
                 return Err(bad_request("invalid_grant"));
             }
 
@@ -92,12 +91,10 @@ pub async fn exchange_oauth_token(
             let account_version = match account {
                 Some(account) if account.status == "Active" => account.version,
                 _ => {
-                    refresh_tokens.delete(refresh_token).await?;
                     return Err(bad_request("invalid_grant"));
                 }
             };
 
-            refresh_tokens.delete(refresh_token).await?;
             issue_token_pair(
                 refresh_tokens,
                 sessions,

@@ -1,25 +1,20 @@
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use sha2::{Digest, Sha256};
-use worker::kv::KvStore;
+use worker::Env;
 
-use crate::{
-    application::auth::refresh_token::{
-        RefreshTokenStore, RefreshTokenStoreError, RefreshTokenStoreFuture, RefreshTokenValue,
-    },
-    infrastructure::kv as kv_helper,
+use crate::application::auth::refresh_token::{
+    RefreshTokenStore, RefreshTokenStoreError, RefreshTokenStoreFuture, RefreshTokenValue,
 };
 
-pub struct KvRefreshTokenStore<'a> {
-    kv: &'a KvStore,
+use super::oauth_state_do_client::{
+    delete_oauth_state, load_and_delete_oauth_state, load_oauth_state, save_oauth_state,
+};
+
+pub struct DoRefreshTokenStore<'a> {
+    pub env: &'a Env,
 }
 
-impl<'a> KvRefreshTokenStore<'a> {
-    pub fn new(kv: &'a KvStore) -> Self {
-        Self { kv }
-    }
-}
-
-impl RefreshTokenStore for KvRefreshTokenStore<'_> {
+impl RefreshTokenStore for DoRefreshTokenStore<'_> {
     fn save<'a>(
         &'a self,
         token: &'a str,
@@ -27,10 +22,11 @@ impl RefreshTokenStore for KvRefreshTokenStore<'_> {
         ttl_secs: u64,
     ) -> RefreshTokenStoreFuture<'a, ()> {
         Box::pin(async move {
-            let token_hash = hash_refresh_token(token);
-            kv_helper::put_json(self.kv, &refresh_kv_key(&token_hash), value, ttl_secs)
+            let value_json = serde_json::to_string(value)
+                .map_err(|e| RefreshTokenStoreError::Backend(e.to_string()))?;
+            save_oauth_state(self.env, &refresh_do_name(token), &value_json, ttl_secs)
                 .await
-                .map_err(to_store_error)
+                .map_err(|e| RefreshTokenStoreError::Backend(e.to_string()))
         })
     }
 
@@ -39,19 +35,40 @@ impl RefreshTokenStore for KvRefreshTokenStore<'_> {
         token: &'a str,
     ) -> RefreshTokenStoreFuture<'a, Option<RefreshTokenValue>> {
         Box::pin(async move {
-            let token_hash = hash_refresh_token(token);
-            kv_helper::get_json::<RefreshTokenValue>(self.kv, &refresh_kv_key(&token_hash))
+            let value_json = load_oauth_state(self.env, &refresh_do_name(token))
                 .await
-                .map_err(to_store_error)
+                .map_err(|e| RefreshTokenStoreError::Backend(e.to_string()))?;
+            value_json
+                .map(|value_json| {
+                    serde_json::from_str::<RefreshTokenValue>(&value_json)
+                        .map_err(|e| RefreshTokenStoreError::Backend(e.to_string()))
+                })
+                .transpose()
+        })
+    }
+
+    fn load_and_delete<'a>(
+        &'a self,
+        token: &'a str,
+    ) -> RefreshTokenStoreFuture<'a, Option<RefreshTokenValue>> {
+        Box::pin(async move {
+            let value_json = load_and_delete_oauth_state(self.env, &refresh_do_name(token))
+                .await
+                .map_err(|e| RefreshTokenStoreError::Backend(e.to_string()))?;
+            value_json
+                .map(|value_json| {
+                    serde_json::from_str::<RefreshTokenValue>(&value_json)
+                        .map_err(|e| RefreshTokenStoreError::Backend(e.to_string()))
+                })
+                .transpose()
         })
     }
 
     fn delete<'a>(&'a self, token: &'a str) -> RefreshTokenStoreFuture<'a, ()> {
         Box::pin(async move {
-            let token_hash = hash_refresh_token(token);
-            kv_helper::delete(self.kv, &refresh_kv_key(&token_hash))
+            delete_oauth_state(self.env, &refresh_do_name(token))
                 .await
-                .map_err(to_store_error)
+                .map_err(|e| RefreshTokenStoreError::Backend(e.to_string()))
         })
     }
 }
@@ -60,10 +77,6 @@ fn hash_refresh_token(token: &str) -> String {
     URL_SAFE_NO_PAD.encode(Sha256::digest(token.as_bytes()))
 }
 
-fn refresh_kv_key(token_hash: &str) -> String {
-    format!("oauth:refresh:{token_hash}")
-}
-
-fn to_store_error(error: worker::Error) -> RefreshTokenStoreError {
-    RefreshTokenStoreError::Backend(error.to_string())
+fn refresh_do_name(token: &str) -> String {
+    format!("refresh:{}", hash_refresh_token(token))
 }

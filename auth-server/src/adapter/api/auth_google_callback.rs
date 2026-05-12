@@ -16,7 +16,7 @@ use crate::{
     },
     infrastructure::{
         account_read_repository::D1AccountReadRepository,
-        app_authorization_code_store::KvAppAuthorizationCodeStore, clock::WorkerClock,
+        app_authorization_code_store::DoAppAuthorizationCodeStore, clock::WorkerClock,
         command_bus::DoCommandBus, env::Environment, id_generator::UuidV7Generator,
         oidc_state_store::KvOidcStateStore, providers::google::GoogleProvider,
         random::GetRandomTokenGenerator, session_issuer::EnvSessionIssuer,
@@ -63,7 +63,7 @@ pub fn router(
             clock: &clock,
         };
         let oidc_state_store = KvOidcStateStore::new(&kv);
-        let app_codes = KvAppAuthorizationCodeStore::new(&kv);
+        let app_codes = DoAppAuthorizationCodeStore { env };
         let accounts = D1AccountReadRepository { env };
         let commands = DoCommandBus { env };
         let sessions = EnvSessionIssuer::load(env, &clock, &ids)?;

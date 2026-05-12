@@ -13,12 +13,12 @@ use crate::{
     },
     infrastructure::{
         account_read_repository::{D1AccountReadRepository, DoAccountCurrentRepository},
-        app_authorization_code_store::KvAppAuthorizationCodeStore,
+        app_authorization_code_store::DoAppAuthorizationCodeStore,
         clock::WorkerClock,
         env::Environment,
         id_generator::UuidV7Generator,
         random::GetRandomTokenGenerator,
-        refresh_token_store::KvRefreshTokenStore,
+        refresh_token_store::DoRefreshTokenStore,
         session_issuer::EnvSessionIssuer,
     },
     AppState,
@@ -49,13 +49,12 @@ pub fn router(
     SendFuture::new(async move {
         let env = &state.env;
         let environment = Environment::load(env)?;
-        let kv = env.kv("KV")?;
         let clock = WorkerClock;
         let ids = UuidV7Generator;
         let tokens = GetRandomTokenGenerator;
         let sessions = EnvSessionIssuer::load(env, &clock, &ids)?;
-        let app_codes = KvAppAuthorizationCodeStore::new(&kv);
-        let refresh_tokens = KvRefreshTokenStore::new(&kv);
+        let app_codes = DoAppAuthorizationCodeStore { env };
+        let refresh_tokens = DoRefreshTokenStore { env };
         let accounts = D1AccountReadRepository { env };
         let current_accounts = DoAccountCurrentRepository { env };
         let config = TokenExchangeConfig {

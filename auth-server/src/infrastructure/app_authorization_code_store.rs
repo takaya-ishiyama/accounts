@@ -1,24 +1,19 @@
-use worker::kv::KvStore;
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use sha2::{Digest, Sha256};
+use worker::Env;
 
-use crate::{
-    application::auth::app_authorization_code::{
-        AppAuthorizationCodeStore, AppAuthorizationCodeStoreError, AppAuthorizationCodeStoreFuture,
-        AppAuthorizationCodeValue,
-    },
-    infrastructure::kv as kv_helper,
+use crate::application::auth::app_authorization_code::{
+    AppAuthorizationCodeStore, AppAuthorizationCodeStoreError, AppAuthorizationCodeStoreFuture,
+    AppAuthorizationCodeValue,
 };
 
-pub struct KvAppAuthorizationCodeStore<'a> {
-    kv: &'a KvStore,
+use super::oauth_state_do_client::{load_and_delete_oauth_state, save_oauth_state};
+
+pub struct DoAppAuthorizationCodeStore<'a> {
+    pub env: &'a Env,
 }
 
-impl<'a> KvAppAuthorizationCodeStore<'a> {
-    pub fn new(kv: &'a KvStore) -> Self {
-        Self { kv }
-    }
-}
-
-impl AppAuthorizationCodeStore for KvAppAuthorizationCodeStore<'_> {
+impl AppAuthorizationCodeStore for DoAppAuthorizationCodeStore<'_> {
     fn save<'a>(
         &'a self,
         code: &'a str,
@@ -26,9 +21,11 @@ impl AppAuthorizationCodeStore for KvAppAuthorizationCodeStore<'_> {
         ttl_secs: u64,
     ) -> AppAuthorizationCodeStoreFuture<'a, ()> {
         Box::pin(async move {
-            kv_helper::put_json(self.kv, &code_kv_key(code), value, ttl_secs)
+            let value_json = serde_json::to_string(value)
+                .map_err(|e| AppAuthorizationCodeStoreError::Backend(e.to_string()))?;
+            save_oauth_state(self.env, &code_do_name(code), &value_json, ttl_secs)
                 .await
-                .map_err(to_store_error)
+                .map_err(|e| AppAuthorizationCodeStoreError::Backend(e.to_string()))
         })
     }
 
@@ -37,24 +34,22 @@ impl AppAuthorizationCodeStore for KvAppAuthorizationCodeStore<'_> {
         code: &'a str,
     ) -> AppAuthorizationCodeStoreFuture<'a, Option<AppAuthorizationCodeValue>> {
         Box::pin(async move {
-            let key = code_kv_key(code);
-            let value = kv_helper::get_json::<AppAuthorizationCodeValue>(self.kv, &key)
+            let value_json = load_and_delete_oauth_state(self.env, &code_do_name(code))
                 .await
-                .map_err(to_store_error)?;
-            if value.is_some() {
-                kv_helper::delete(self.kv, &key)
-                    .await
-                    .map_err(to_store_error)?;
-            }
-            Ok(value)
+                .map_err(|e| AppAuthorizationCodeStoreError::Backend(e.to_string()))?;
+            value_json
+                .map(|value_json| {
+                    serde_json::from_str::<AppAuthorizationCodeValue>(&value_json)
+                        .map_err(|e| AppAuthorizationCodeStoreError::Backend(e.to_string()))
+                })
+                .transpose()
         })
     }
 }
 
-fn code_kv_key(code: &str) -> String {
-    format!("oauth:code:{code}")
-}
-
-fn to_store_error(error: worker::Error) -> AppAuthorizationCodeStoreError {
-    AppAuthorizationCodeStoreError::Backend(error.to_string())
+fn code_do_name(code: &str) -> String {
+    format!(
+        "code:{}",
+        URL_SAFE_NO_PAD.encode(Sha256::digest(code.as_bytes()))
+    )
 }

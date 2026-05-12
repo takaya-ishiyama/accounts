@@ -26,12 +26,17 @@ preview_id = "80d4152954e340299efa3ee978e3953a"
 
 [durable_objects]
 bindings = [
-  { name = "AUTH_DO", class_name = "AuthDurableObject" }
+  { name = "AUTH_DO", class_name = "AuthDurableObject" },
+  { name = "OAUTH_STATE_DO", class_name = "OAuthStateDurableObject" }
 ]
 
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["AuthDurableObject"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["OAuthStateDurableObject"]
 
 [[queues.producers]]
 binding = "QUEUE"
@@ -73,12 +78,17 @@ preview_id = "80d4152954e340299efa3ee978e3953a"
 
 [env.staging.durable_objects]
 bindings = [
-  { name = "AUTH_DO", class_name = "AuthDurableObject" }
+  { name = "AUTH_DO", class_name = "AuthDurableObject" },
+  { name = "OAUTH_STATE_DO", class_name = "OAuthStateDurableObject" }
 ]
 
 [[env.staging.migrations]]
 tag = "v1"
 new_sqlite_classes = ["AuthDurableObject"]
+
+[[env.staging.migrations]]
+tag = "v2"
+new_sqlite_classes = ["OAuthStateDurableObject"]
 
 [[env.staging.queues.producers]]
 binding = "QUEUE"
@@ -120,12 +130,17 @@ preview_id = "1509054e339d45ba8fe26c0e4f71f462"
 
 [env.production.durable_objects]
 bindings = [
-  { name = "AUTH_DO", class_name = "AuthDurableObject" }
+  { name = "AUTH_DO", class_name = "AuthDurableObject" },
+  { name = "OAUTH_STATE_DO", class_name = "OAuthStateDurableObject" }
 ]
 
 [[env.production.migrations]]
 tag = "v1"
 new_sqlite_classes = ["AuthDurableObject"]
+
+[[env.production.migrations]]
+tag = "v2"
+new_sqlite_classes = ["OAuthStateDurableObject"]
 
 [[env.production.queues.producers]]
 binding = "QUEUE"

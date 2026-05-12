@@ -7,6 +7,7 @@ pub mod env;
 pub mod id_generator;
 pub mod ids;
 pub mod kv;
+pub mod oauth_state_do_client;
 pub mod oidc_state_store;
 pub mod providers;
 pub mod random;

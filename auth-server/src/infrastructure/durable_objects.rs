@@ -22,6 +22,12 @@ pub struct AuthDurableObject {
     env: Env,
 }
 
+#[durable_object]
+pub struct OAuthStateDurableObject {
+    state: State,
+    _env: Env,
+}
+
 impl DurableObject for AuthDurableObject {
     fn new(state: State, env: Env) -> Self {
         Self { state, env }
@@ -45,6 +51,74 @@ impl DurableObject for AuthDurableObject {
     async fn alarm(&self) -> Result<Response> {
         self.sweep_outbox().await?;
         Response::ok("ok")
+    }
+}
+
+impl DurableObject for OAuthStateDurableObject {
+    fn new(state: State, env: Env) -> Self {
+        Self { state, _env: env }
+    }
+
+    async fn fetch(&self, mut req: Request) -> Result<Response> {
+        let path = req.path();
+        match (req.method(), path.as_str()) {
+            (Method::Post, "/value") => self.handle_store(&mut req).await,
+            (Method::Get, "/value") => self.handle_load().await,
+            (Method::Post, "/load-and-delete") => self.handle_load_and_delete().await,
+            (Method::Delete, "/value") => self.handle_delete().await,
+            _ => Response::error("Not Found", 404),
+        }
+    }
+
+    async fn alarm(&self) -> Result<Response> {
+        self.clear_stored_value().await?;
+        Response::ok("ok")
+    }
+}
+
+impl OAuthStateDurableObject {
+    async fn handle_store(&self, req: &mut Request) -> Result<Response> {
+        #[derive(Deserialize)]
+        struct StoreRequest {
+            value_json: String,
+            ttl_secs: u64,
+        }
+
+        let body: StoreRequest = req.json().await?;
+        let storage = self.state.storage();
+        storage.put("value_json", body.value_json).await?;
+        storage
+            .set_alarm(Duration::from_secs(body.ttl_secs))
+            .await?;
+        Response::ok("ok")
+    }
+
+    async fn handle_load(&self) -> Result<Response> {
+        match self.state.storage().get::<String>("value_json").await? {
+            Some(value_json) => Response::ok(value_json),
+            None => Response::error("Not Found", 404),
+        }
+    }
+
+    async fn handle_load_and_delete(&self) -> Result<Response> {
+        let storage = self.state.storage();
+        let value_json = storage.get::<String>("value_json").await?;
+        self.clear_stored_value().await?;
+
+        match value_json {
+            Some(value_json) => Response::ok(value_json),
+            None => Response::error("Not Found", 404),
+        }
+    }
+
+    async fn handle_delete(&self) -> Result<Response> {
+        self.clear_stored_value().await?;
+        Response::ok("ok")
+    }
+
+    async fn clear_stored_value(&self) -> Result<()> {
+        self.state.storage().delete("value_json").await?;
+        Ok(())
     }
 }
 

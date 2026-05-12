@@ -38,5 +38,10 @@ pub trait RefreshTokenStore {
     fn load<'a>(&'a self, token: &'a str)
         -> RefreshTokenStoreFuture<'a, Option<RefreshTokenValue>>;
 
+    fn load_and_delete<'a>(
+        &'a self,
+        token: &'a str,
+    ) -> RefreshTokenStoreFuture<'a, Option<RefreshTokenValue>>;
+
     fn delete<'a>(&'a self, token: &'a str) -> RefreshTokenStoreFuture<'a, ()>;
 }

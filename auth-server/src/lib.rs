@@ -11,7 +11,7 @@ pub mod application;
 pub mod domain;
 pub mod infrastructure;
 
-pub use infrastructure::durable_objects::AuthDurableObject;
+pub use infrastructure::durable_objects::{AuthDurableObject, OAuthStateDurableObject};
 
 #[derive(Clone)]
 pub struct AppState {
