@@ -18,19 +18,29 @@
 
 ```toml
 APP_CLIENTS='[
-  {
-    "client_id": "cook-note-web",
-    "token_audience": "cook-note",
-    "redirect_uri": "https://cook-note.example.com/auth/callback"
-  }
+	  {
+	    "client_id": "cook-note-web",
+	    "client_secret": "replace-with-secret",
+	    "token_audience": "cook-note",
+	    "redirect_uri": "https://cook-note.example.com/auth/callback"
+	  }
 ]'
 ```
 
 各項目の意味:
 
 - `client_id`: アプリケーション識別子
+- `client_secret`: アプリ backend が `/oauth/token` で使う secret。ブラウザには渡さない
 - `token_audience`: 発行する access token の `aud`
 - `redirect_uri`: app authorization code を返すアプリ側 callback URL
+
+アプリ backend 側には少なくとも次の環境変数を置く想定です。
+
+| 名前 | 用途 |
+|---|---|
+| `AUTH_SERVER_URL` | auth-server の origin。例: `https://auth.example.com` |
+| `AUTH_CLIENT_ID` | `APP_CLIENTS[].client_id` と同じ値 |
+| `AUTH_CLIENT_SECRET` | `APP_CLIENTS[].client_secret` と同じ値。backend の secret として管理する |
 
 主な環境変数:
 
@@ -97,10 +107,10 @@ GET https://cook-note.example.com/auth/callback?code=...&return_to=%2Fdashboard&
 ```http
 POST https://auth.example.com/oauth/token
 Content-Type: application/json
+Authorization: Basic base64(AUTH_CLIENT_ID:AUTH_CLIENT_SECRET)
 
 {
   "grant_type": "authorization_code",
-  "client_id": "cook-note-web",
   "code": "..."
 }
 ```
@@ -172,10 +182,10 @@ access token が期限切れになる前後に、アプリ backend から refres
 ```http
 POST https://auth.example.com/oauth/token
 Content-Type: application/json
+Authorization: Basic base64(AUTH_CLIENT_ID:AUTH_CLIENT_SECRET)
 
 {
   "grant_type": "refresh_token",
-  "client_id": "cook-note-web",
   "refresh_token": "..."
 }
 ```

@@ -4,6 +4,7 @@ use thiserror::Error;
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct AppClient {
     pub client_id: String,
+    pub client_secret: String,
     pub token_audience: String,
     pub redirect_uri: String,
 }
@@ -17,6 +18,8 @@ pub enum AppClientError {
     Empty,
     #[error("client_id must not be empty")]
     EmptyClientId,
+    #[error("client_secret must not be empty")]
+    EmptyClientSecret,
     #[error("token_audience must not be empty")]
     EmptyTokenAudience,
     #[error("redirect_uri must not be empty")]
@@ -45,6 +48,9 @@ impl AppClients {
         for client in &clients {
             if client.client_id.trim().is_empty() {
                 return Err(AppClientError::EmptyClientId);
+            }
+            if client.client_secret.trim().is_empty() {
+                return Err(AppClientError::EmptyClientSecret);
             }
             if client.token_audience.trim().is_empty() {
                 return Err(AppClientError::EmptyTokenAudience);
@@ -75,7 +81,7 @@ mod tests {
     #[test]
     fn parses_clients() {
         let clients = parse(
-            r#"[{"client_id":"web","token_audience":"api","redirect_uri":"https://app.example/cb"}]"#,
+            r#"[{"client_id":"web","client_secret":"secret","token_audience":"api","redirect_uri":"https://app.example/cb"}]"#,
         )
         .unwrap();
 
@@ -85,7 +91,7 @@ mod tests {
     #[test]
     fn rejects_unknown_client() {
         let clients = parse(
-            r#"[{"client_id":"web","token_audience":"api","redirect_uri":"https://app.example/cb"}]"#,
+            r#"[{"client_id":"web","client_secret":"secret","token_audience":"api","redirect_uri":"https://app.example/cb"}]"#,
         )
         .unwrap();
 
