@@ -1,7 +1,6 @@
 use axum::{
     extract::{Query, State},
-    http::{header, HeaderValue, StatusCode},
-    response::{IntoResponse, Response},
+    response::{IntoResponse, Redirect, Response},
 };
 use serde::Deserialize;
 use std::future::Future;
@@ -9,7 +8,7 @@ use worker::send::SendFuture;
 
 use crate::{
     application::{
-        http::error::{bad_request, internal, AppError},
+        http::error::{bad_request, AppError},
         usecase::commands::complete_google_signin::{
             complete_google_signin, CompleteGoogleSigninConfig,
         },
@@ -19,7 +18,7 @@ use crate::{
         app_authorization_code_store::DoAppAuthorizationCodeStore, clock::WorkerClock,
         command_bus::DoCommandBus, env::Environment, id_generator::UuidV7Generator,
         oidc_state_store::KvOidcStateStore, providers::google::GoogleProvider,
-        random::GetRandomTokenGenerator, session_issuer::EnvSessionIssuer,
+        random::GetRandomTokenGenerator,
     },
     AppState,
 };
@@ -66,7 +65,6 @@ pub fn router(
         let app_codes = DoAppAuthorizationCodeStore { env };
         let accounts = D1AccountReadRepository { env };
         let commands = DoCommandBus { env };
-        let sessions = EnvSessionIssuer::load(env, &clock, &ids)?;
         let config = CompleteGoogleSigninConfig {
             app_code_ttl_secs: env_app_code_ttl_secs(env),
         };
@@ -77,7 +75,6 @@ pub fn router(
             &app_codes,
             &accounts,
             &commands,
-            &sessions,
             &clock,
             &ids,
             &tokens,
@@ -85,31 +82,11 @@ pub fn router(
             &config,
             code,
             state_key,
-            &environment.default_audience,
         )
         .await?;
 
-        redirect_with_session(&completed.redirect_uri, &completed.jwt, completed.ttl_secs)
+        Ok(Redirect::to(&completed.redirect_uri).into_response())
     })
-}
-
-fn redirect_with_session(location: &str, jwt: &str, ttl_secs: u64) -> Result<Response, AppError> {
-    let cookie =
-        format!("__Host-session={jwt}; Max-Age={ttl_secs}; Path=/; Secure; HttpOnly; SameSite=Lax");
-    let mut response = StatusCode::FOUND.into_response();
-    response.headers_mut().insert(
-        header::LOCATION,
-        HeaderValue::from_str(location).map_err(|e| internal(e.to_string()))?,
-    );
-    response.headers_mut().insert(
-        header::SET_COOKIE,
-        HeaderValue::from_str(&cookie).map_err(|e| internal(e.to_string()))?,
-    );
-    response.headers_mut().insert(
-        header::REFERRER_POLICY,
-        HeaderValue::from_static("no-referrer"),
-    );
-    Ok(response)
 }
 
 fn env_app_code_ttl_secs(env: &worker::Env) -> u64 {

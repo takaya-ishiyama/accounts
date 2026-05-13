@@ -6,7 +6,6 @@
 
 ## 登場するセッションと token
 
-- `__Host-session`: auth-server ドメイン上の中央 SSO セッション
 - app session: 各アプリケーションが自ドメインで発行するログインセッション
 - app authorization code: auth-server からアプリ callback に返す短命 one-time code
 - access token: 各アプリ API が検証する RS256 JWT
@@ -246,17 +245,6 @@ GET /.well-known/jwks.json
 GET /.well-known/openid-configuration
 ```
 
-### Current account
-
-auth-server の `__Host-session` Cookie を使う auth-server 自身向け API です。
-
-```http
-GET /me
-Cookie: __Host-session=...
-```
-
-アプリケーションのログイン状態確認には使わないでください。各アプリは自分の app session を見ます。
-
 ## ローカル開発
 
 ```sh
@@ -285,6 +273,7 @@ MISE_ENV=production mise run migrate-production
 ## 制限事項
 
 - public client / frontend-only token exchange は対象外
+- auth-server の current account API は未実装
 - refresh token revoke API は未実装
 - device 一覧、session 一覧は未実装
 - consent 画面は未実装
