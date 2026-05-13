@@ -1,41 +1,41 @@
-# Repository Guidelines
+# リポジトリガイドライン
 
-## Project Structure & Module Organization
+## プロジェクト構成とモジュール編成
 
-This is a Rust 2021 Cloudflare Workers auth service. The Worker entry point is `src/lib.rs`, which wires Axum routes, queue handling, and security headers.
+これは Rust 2021 の Cloudflare Workers 認証サービスです。Worker のエントリポイントは `src/lib.rs` で、Axum ルート、キュー処理、セキュリティヘッダーを接続しています。
 
-- `src/adapter/`: HTTP API handlers and boundary code.
-- `src/application/`: use cases, command/query flows, projections, and HTTP helpers.
-- `src/domain/`: models, auth rules, events, and pure business logic.
-- `src/infrastructure/`: Cloudflare bindings, repositories, providers, tokens, sessions, and environment adapters.
-- `db/schema.sql` and `db/migrations/`: Atlas-managed D1 schema and migrations.
-- `docs/`, `README.md`, and `USAGE.md`: design notes and operational usage.
+- `src/adapter/`: HTTP API ハンドラーと境界コード。
+- `src/application/`: ユースケース、コマンド/クエリフロー、プロジェクション、HTTP ヘルパー。
+- `src/domain/`: モデル、認証ルール、イベント、純粋なビジネスロジック。
+- `src/infrastructure/`: Cloudflare バインディング、リポジトリ、プロバイダー、トークン、セッション、環境アダプター。
+- `db/schema.sql` と `db/migrations/`: Atlas 管理の D1 スキーマとマイグレーション。
+- `docs/`、`README.md`、`USAGE.md`: 設計メモと運用上の使い方。
 
-## Build, Test, and Development Commands
+## ビルド、テスト、開発コマンド
 
-- `mise run dev`: starts Wrangler development on port `8000`.
-- `cargo test`: runs Rust unit tests.
-- `cargo fmt --check`: checks Rust formatting.
-- `cargo clippy --all-targets --all-features`: runs Rust lints.
-- `mise run migrate-local`: applies the initial D1 migration locally.
-- `mise run migrate-diff`: generates Atlas migration diffs from `db/schema.sql`.
-- `MISE_ENV=staging mise run migrate-staging` / `mise run deploy-staging`: applies and deploys staging.
-- `MISE_ENV=production mise run migrate-production` / `mise run deploy-production`: applies and deploys production.
+- `mise run dev`: Wrangler 開発サーバーをポート `8000` で起動します。
+- `cargo test`: Rust のユニットテストを実行します。
+- `cargo fmt --check`: Rust のフォーマットを確認します。
+- `cargo clippy --all-targets --all-features`: Rust の lint を実行します。
+- `mise run migrate-local`: 初期 D1 マイグレーションをローカルに適用します。
+- `mise run migrate-diff`: `db/schema.sql` から Atlas のマイグレーション差分を生成します。
+- `MISE_ENV=staging mise run migrate-staging` / `mise run deploy-staging`: staging へ適用およびデプロイします。
+- `MISE_ENV=production mise run migrate-production` / `mise run deploy-production`: production へ適用およびデプロイします。
 
-Wrangler build configuration lives in `wrangler.toml`; it installs `worker-build@^0.8` and builds release WASM.
+Wrangler のビルド設定は `wrangler.toml` にあります。`worker-build@^0.8` をインストールし、release WASM をビルドします。
 
-## Coding Style & Naming Conventions
+## コーディングスタイルと命名規則
 
-Use standard Rust formatting with `rustfmt`; keep imports tidy and module boundaries explicit. Follow existing snake_case file names such as `refresh_token_store.rs` and `auth_google_callback.rs`. Domain types use `PascalCase`, functions and variables use `snake_case`, and constants use `SCREAMING_SNAKE_CASE` when needed. Keep domain code free of Cloudflare APIs; place Worker, D1, KV, queue, and provider integrations in `infrastructure` or `adapter`.
+`rustfmt` による標準的な Rust フォーマットを使い、import を整理し、モジュール境界を明確に保ってください。`refresh_token_store.rs` や `auth_google_callback.rs` のような既存の snake_case ファイル名に従ってください。ドメイン型は `PascalCase`、関数と変数は `snake_case`、定数は必要に応じて `SCREAMING_SNAKE_CASE` を使います。ドメインコードから Cloudflare API を切り離し、Worker、D1、KV、キュー、プロバイダー連携は `infrastructure` または `adapter` に配置してください。
 
-## Testing Guidelines
+## テストガイドライン
 
-Unit tests live next to implementation files in `#[cfg(test)] mod tests` blocks. Add tests for domain rules, parsers, validation, and use case branching when behavior changes. Prefer deterministic tests with local fixtures over network calls. Run `cargo test` before submitting changes; add focused tests near the changed module unless Worker bindings require integration coverage.
+ユニットテストは実装ファイルの近くにある `#[cfg(test)] mod tests` ブロックに置きます。振る舞いが変わる場合は、ドメインルール、パーサー、バリデーション、ユースケース分岐のテストを追加してください。ネットワーク呼び出しよりも、ローカルフィクスチャを使った決定的なテストを優先します。変更を提出する前に `cargo test` を実行してください。Worker バインディングに統合カバレッジが必要な場合を除き、変更したモジュールの近くに焦点を絞ったテストを追加します。
 
-## Commit & Pull Request Guidelines
+## コミットとプルリクエストのガイドライン
 
-Recent history uses short imperative subjects such as `fix state`, `refactor`, and `usage`. Keep commits small and focused. Pull requests should include a summary, test results (`cargo test`, formatting/lint checks), migration notes for `db/` changes, and deployment or secret updates when `wrangler.toml` or environment behavior changes.
+直近の履歴では `fix state`、`refactor`、`usage` のような短い命令形の件名が使われています。コミットは小さく、焦点を絞ってください。プルリクエストには概要、テスト結果（`cargo test`、フォーマット/lint チェック）、`db/` 変更のマイグレーションメモ、`wrangler.toml` や環境の振る舞いが変わる場合のデプロイまたはシークレット更新情報を含めてください。
 
-## Security & Configuration Tips
+## セキュリティと設定の注意点
 
-Do not commit secrets from `.env.local`, `.env.staging`, `.env.production`, or Wrangler secret values. Review OAuth redirect URIs, JWT settings, D1 database names, KV namespace IDs, Durable Objects, and queue bindings in `wrangler.toml` when changing environment-specific behavior.
+`.env.local`、`.env.staging`、`.env.production`、または Wrangler のシークレット値をコミットしないでください。環境固有の振る舞いを変更する場合は、`wrangler.toml` の OAuth リダイレクト URI、JWT 設定、D1 データベース名、KV namespace ID、Durable Objects、キューバインディングを確認してください。
