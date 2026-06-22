@@ -66,12 +66,14 @@ sequenceDiagram
 ```json
 {
   "client_id": "cook-note-web",
+  "client_secret": "replace-with-secret",
   "token_audience": "cook-note",
   "redirect_uri": "https://cook-note.example.com/auth/callback"
 }
 ```
 
 - `client_id`: 認証フローを開始したアプリケーションの識別子
+- `client_secret`: token endpoint でアプリ backend を認証するための secret。ブラウザには渡さない
 - `token_audience`: 発行する access token の `aud`
 - `redirect_uri`: authorization code を返す先。リクエスト値を自由に採用せず、登録済み値を使う
 
@@ -141,11 +143,11 @@ authorization code exchange:
 ```http
 POST /oauth/token
 Content-Type: application/json
+Authorization: Basic base64(client_id:client_secret)
 
 {
   "grant_type": "authorization_code",
-  "code": "...",
-  "client_id": "cook-note-web"
+  "code": "..."
 }
 ```
 
@@ -165,11 +167,11 @@ refresh token exchange:
 ```http
 POST /oauth/token
 Content-Type: application/json
+Authorization: Basic base64(client_id:client_secret)
 
 {
   "grant_type": "refresh_token",
-  "refresh_token": "...",
-  "client_id": "cook-note-web"
+  "refresh_token": "..."
 }
 ```
 
@@ -290,7 +292,7 @@ refresh token は JWT ではなく opaque token として扱う。
 ## 実装対象
 
 - client 設定の読み込み
-- `client_id` 検証
+- token endpoint での `client_id` / `client_secret` 認証
 - `client_id -> redirect_uri/token_audience` の解決
 - OIDC state への `client_id` 保存
 - app authorization code の発行・保存・one-time 消費

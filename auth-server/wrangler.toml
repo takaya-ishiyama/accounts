@@ -26,12 +26,17 @@ preview_id = "80d4152954e340299efa3ee978e3953a"
 
 [durable_objects]
 bindings = [
-  { name = "AUTH_DO", class_name = "AuthDurableObject" }
+  { name = "AUTH_DO", class_name = "AuthDurableObject" },
+  { name = "OAUTH_STATE_DO", class_name = "OAuthStateDurableObject" }
 ]
 
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["AuthDurableObject"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["OAuthStateDurableObject"]
 
 [[queues.producers]]
 binding = "QUEUE"
@@ -57,6 +62,8 @@ OAUTH_REDIRECT_URI="https://auth-server-staging.cook-note.workers.dev/auth/googl
 JWT_ISSUER="https://auth-server-staging.cook-note.workers.dev"
 JWT_DEFAULT_AUDIENCE="app-api"
 ALLOWED_AUDIENCES="app-api,cook-note"
+APP_CLIENTS='[{"client_id":"cook-note-web","client_secret":"replace-with-secret","token_audience":"cook-note","redirect_uri":"https://cook-note.example.com/auth/callback"}]'
+REFRESH_TOKEN_TTL_SECS="2592000"
 
 [[env.staging.d1_databases]]
 binding = "DB"
@@ -71,12 +78,17 @@ preview_id = "80d4152954e340299efa3ee978e3953a"
 
 [env.staging.durable_objects]
 bindings = [
-  { name = "AUTH_DO", class_name = "AuthDurableObject" }
+  { name = "AUTH_DO", class_name = "AuthDurableObject" },
+  { name = "OAUTH_STATE_DO", class_name = "OAuthStateDurableObject" }
 ]
 
 [[env.staging.migrations]]
 tag = "v1"
 new_sqlite_classes = ["AuthDurableObject"]
+
+[[env.staging.migrations]]
+tag = "v2"
+new_sqlite_classes = ["OAuthStateDurableObject"]
 
 [[env.staging.queues.producers]]
 binding = "QUEUE"
@@ -102,6 +114,8 @@ OAUTH_REDIRECT_URI="https://auth-server-production.cook-note.workers.dev/auth/go
 JWT_ISSUER="https://auth-server-production.cook-note.workers.dev"
 JWT_DEFAULT_AUDIENCE="app-api"
 ALLOWED_AUDIENCES="app-api,cook-note"
+APP_CLIENTS='[{"client_id":"cook-note-web","client_secret":"replace-with-secret","token_audience":"cook-note","redirect_uri":"https://cook-note.example.com/auth/callback"}]'
+REFRESH_TOKEN_TTL_SECS="2592000"
 
 [[env.production.d1_databases]]
 binding = "DB"
@@ -116,12 +130,17 @@ preview_id = "1509054e339d45ba8fe26c0e4f71f462"
 
 [env.production.durable_objects]
 bindings = [
-  { name = "AUTH_DO", class_name = "AuthDurableObject" }
+  { name = "AUTH_DO", class_name = "AuthDurableObject" },
+  { name = "OAUTH_STATE_DO", class_name = "OAuthStateDurableObject" }
 ]
 
 [[env.production.migrations]]
 tag = "v1"
 new_sqlite_classes = ["AuthDurableObject"]
+
+[[env.production.migrations]]
+tag = "v2"
+new_sqlite_classes = ["OAuthStateDurableObject"]
 
 [[env.production.queues.producers]]
 binding = "QUEUE"

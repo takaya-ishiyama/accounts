@@ -2,7 +2,7 @@
 env = ["local"]
 
 [tasks.dev]
-run="npx wrangler dev"
+run="npx wrangler dev --port 8000"
 
 [tasks.migrate-local]
 dir = "db"

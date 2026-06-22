@@ -11,7 +11,7 @@ pub mod application;
 pub mod domain;
 pub mod infrastructure;
 
-pub use infrastructure::durable_objects::AuthDurableObject;
+pub use infrastructure::durable_objects::{AuthDurableObject, OAuthStateDurableObject};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -23,7 +23,6 @@ fn router(env: Env) -> Router {
     Router::new()
         .route("/", get(root))
         .route("/healthz", get(|| async { "OK" }))
-        .route("/me", get(adapter::api::me::router))
         .route(
             "/auth/google/start",
             get(adapter::api::auth_google_start::router),
@@ -32,11 +31,7 @@ fn router(env: Env) -> Router {
             "/auth/google/callback",
             get(adapter::api::auth_google_callback::router),
         )
-        .route("/auth/logout", post(adapter::api::auth_logout::router))
-        .route(
-            "/me/identities/google/unlink",
-            post(adapter::api::unlink_google_identity::router),
-        )
+        .route("/oauth/token", post(adapter::api::oauth_token::router))
         .route(
             "/.well-known/jwks.json",
             get(application::http::well_known::jwks_json),

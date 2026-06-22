@@ -1,7 +1,6 @@
 use axum::{
     extract::{Query, State},
-    http::{header, HeaderValue, StatusCode},
-    response::{IntoResponse, Response},
+    response::{IntoResponse, Redirect, Response},
 };
 use serde::Deserialize;
 use std::future::Future;
@@ -9,14 +8,17 @@ use worker::send::SendFuture;
 
 use crate::{
     application::{
-        http::error::{bad_request, internal, AppError},
-        usecase::commands::complete_google_signin::complete_google_signin,
+        http::error::{bad_request, AppError},
+        usecase::commands::complete_google_signin::{
+            complete_google_signin, CompleteGoogleSigninConfig,
+        },
     },
     infrastructure::{
-        account_read_repository::D1AccountReadRepository, clock::WorkerClock,
+        account_read_repository::D1AccountReadRepository,
+        app_authorization_code_store::DoAppAuthorizationCodeStore, clock::WorkerClock,
         command_bus::DoCommandBus, env::Environment, id_generator::UuidV7Generator,
         oidc_state_store::KvOidcStateStore, providers::google::GoogleProvider,
-        random::GetRandomTokenGenerator, session_issuer::EnvSessionIssuer,
+        random::GetRandomTokenGenerator,
     },
     AppState,
 };
@@ -60,47 +62,36 @@ pub fn router(
             clock: &clock,
         };
         let oidc_state_store = KvOidcStateStore::new(&kv);
+        let app_codes = DoAppAuthorizationCodeStore { env };
         let accounts = D1AccountReadRepository { env };
         let commands = DoCommandBus { env };
-        let sessions = EnvSessionIssuer::load(env, &clock, &ids)?;
+        let config = CompleteGoogleSigninConfig {
+            app_code_ttl_secs: env_app_code_ttl_secs(env),
+        };
 
         let completed = complete_google_signin(
             &provider,
             &oidc_state_store,
+            &app_codes,
             &accounts,
             &commands,
-            &sessions,
             &clock,
             &ids,
+            &tokens,
+            &environment.app_clients,
+            &config,
             code,
             state_key,
-            &environment.default_audience,
         )
         .await?;
 
-        Ok(redirect_with_session(
-            &completed.return_to,
-            &completed.jwt,
-            completed.ttl_secs,
-        )?)
+        Ok(Redirect::to(&completed.redirect_uri).into_response())
     })
 }
 
-fn redirect_with_session(location: &str, jwt: &str, ttl_secs: u64) -> Result<Response, AppError> {
-    let cookie =
-        format!("__Host-session={jwt}; Max-Age={ttl_secs}; Path=/; Secure; HttpOnly; SameSite=Lax");
-    let mut response = StatusCode::FOUND.into_response();
-    response.headers_mut().insert(
-        header::LOCATION,
-        HeaderValue::from_str(location).map_err(|e| internal(e.to_string()))?,
-    );
-    response.headers_mut().insert(
-        header::SET_COOKIE,
-        HeaderValue::from_str(&cookie).map_err(|e| internal(e.to_string()))?,
-    );
-    response.headers_mut().insert(
-        header::REFERRER_POLICY,
-        HeaderValue::from_static("no-referrer"),
-    );
-    Ok(response)
+fn env_app_code_ttl_secs(env: &worker::Env) -> u64 {
+    env.var("APP_AUTH_CODE_TTL_SECS")
+        .ok()
+        .and_then(|v| v.to_string().parse().ok())
+        .unwrap_or(300)
 }

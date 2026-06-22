@@ -1,6 +1,9 @@
 use worker::{Env, Result};
 
-use crate::domain::auth::audience::{self, AllowedAudiences};
+use crate::domain::auth::{
+    audience::{self, AllowedAudiences},
+    client::{self, AppClients},
+};
 
 pub fn var(env: &Env, key: &str) -> Result<String> {
     env.var(key).map(|v| v.to_string())
@@ -16,6 +19,7 @@ pub struct Environment {
     pub oauth_redirect_uri: String,
     pub default_audience: String,
     pub allowed_audiences: AllowedAudiences,
+    pub app_clients: AppClients,
 }
 
 impl Environment {
@@ -28,6 +32,9 @@ impl Environment {
             .unwrap_or_else(|| default_audience.clone());
         let allowed_audiences =
             audience::parse(&allowed_raw).map_err(|e| worker::Error::RustError(e.to_string()))?;
+        let app_clients_raw = var(env, "APP_CLIENTS")?;
+        let app_clients =
+            client::parse(&app_clients_raw).map_err(|e| worker::Error::RustError(e.to_string()))?;
 
         Ok(Self {
             google_client_id: var(env, "GOOGLE_CLIENT_ID")?,
@@ -35,6 +42,7 @@ impl Environment {
             oauth_redirect_uri: var(env, "OAUTH_REDIRECT_URI")?,
             default_audience,
             allowed_audiences,
+            app_clients,
         })
     }
 }
